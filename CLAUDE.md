@@ -128,17 +128,19 @@ a versão do Dexie em `openDb()` (`db.version(2).stores(...)` — nunca editar a
   câmera; `perCamera` = no PDF vai para o cabeçalho por câmera (LUT/codec/resolução/unidade); o resto vai na
   coluna "Extras". Gravar sempre com `updateExtra()` (mescla com o objeto atual). Valores já usados no projeto
   viram opções da gaveta (`PickerSheet persist={false}` — não salva no kit, cuja categoria tem CHECK no banco).
-- PDF: circle take = círculo vermelho em volta do nº do take (`didDrawCell`); marcações ao lado do nº; coluna Som
-  (MOS em amarelo); legenda das siglas; colunas curtas com `cellWidth: 'wrap'` (só `FLEX_COLS` quebram linha);
-  `rowPageBreak: 'avoid'`.
-- Para DIT/pós (aba Diárias → "Arquivos para DIT / pós"): `buildDitCsv` (colunas em inglês, casa por
+- PDF: circle take = círculo vermelho em volta do nº do take (`didDrawCell`); coluna "Claquete" (só se houver
+  marcação, nomes em português, 17 mm); coluna Som "Sim/Não" (Não em amarelo); colunas curtas com
+  `cellWidth: 'wrap'` (só `FLEX_COLS` quebram linha; Multicam 14 mm, Extras mín. 34 mm — sem isso os títulos
+  quebram no meio e o PDF da demo dobra de páginas); `rowPageBreak: 'avoid'`.
+- Para DIT/pós (aba Relatórios → "Arquivos para DIT / pós"): `buildDitCsv` (colunas em inglês, casa por
   `filenameBase` = clipe; no Silverstack usar "primeiros N caracteres" = 8 para A001C003) e `buildAle`
   (Avid Log Exchange, TAB; Name = clipe, Start/End = TC, Tracks V/VA1A2). **Não há formato público oficial do
   Silverstack — validar com um DIT real antes de prometer.**
 - Letras de plano pulam I e O (`nextCode`).
 - Nomenclatura (decisão do Antonio): **na tela, português** — marcações "Pickup · Série · Claquete no fim ·
   Recomeço · Sem claquete", som "SYNC / MOS · sem som", ★ "Circular/Circulado" na mesma linha de GOOD/NG/CHECK.
-  **No PDF/CSV/ALE, siglas internacionais** (P/U, SER, TAIL, AFS, NS) com legenda em português (`MARKS[].code`).
+  **PDF em português** (decisão de 24/09/2026: marcações pelo nome, "Sem som", status GOOD/NG/CHECK como na tela).
+  **CSV/DIT/ALE com siglas internacionais** (P/U, SER, TAIL, AFS, NS, SYNC/MOS; `MARKS[].code`).
 
 ## Fotos de referência por take (`src/lib/photos.js`, `components/TakePhotos.jsx`)
 

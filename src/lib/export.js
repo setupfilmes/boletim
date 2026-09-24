@@ -2,7 +2,7 @@
 import { getDb } from './db'
 import { natCompare, fmtDate, fmtTime, joinFilters, plural } from './util'
 import { cameraOrder, projectCameras, takeKey, shotLabel } from './cameras'
-import { EXTRA_FIELDS, extraField, extraText, isEmpty, markCode, MARKS, SOUND } from './fields'
+import { EXTRA_FIELDS, extraField, extraText, isEmpty, markCode, markLabel, SOUND } from './fields'
 import { photoDataUrl } from './photos'
 
 const STATUS_TXT = { good: 'GOOD', ng: 'NG', check: 'CHECK' }
@@ -79,7 +79,8 @@ export async function reportData(projectId, date = null) {
     slate: label(t.shot_id),
     sound: SOUND[t.sound] || '',
     circled: !!t.circled,
-    marks: (t.marks || []).map(markCode).join(' '),
+    marks: (t.marks || []).map(markCode).join(' '), // siglas internacionais (CSV / DIT / ALE)
+    markNames: (t.marks || []).map(markLabel).join(', '), // nomes em português (PDF)
     extra: t.extra || {},
   }))
   // planos que rodaram com mais de uma câmera, na ordem do relatório: "1.1 (A+B)", "12A+12B (A+B)"
@@ -179,7 +180,7 @@ export async function buildPdf(projectId, date = null) {
   const multi = summary.multicamTakes > 0
   const sum = `${plural(summary.takes, 'take')}${summary.records !== summary.takes ? ` (${summary.records} registros de câmera)` : ''}`
     + `  ·  ${plural(summary.scenes, 'cena')}  ·  ${plural(summary.shots, 'plano')}  ·  GOOD ${summary.good}  ·  NG ${summary.ng}  ·  CHECK ${summary.check}`
-    + (summary.circled ? `  ·  Circulados ${summary.circled}` : '') + (summary.mos ? `  ·  MOS ${summary.mos}` : '')
+    + (summary.circled ? `  ·  Circulados ${summary.circled}` : '') + (summary.mos ? `  ·  Sem som ${summary.mos}` : '')
     + (summary.photos ? `  ·  ${plural(summary.photos, 'foto')}` : '')
     + (summary.rolls.length ? `  ·  Cartões: ${summary.rolls.join(', ')}` : '')
   doc.setFontSize(8)
@@ -213,16 +214,16 @@ export async function buildPdf(projectId, date = null) {
   const extrasOf = (r) => takeFields.filter((f) => !isEmpty(r.extra[f.key])).map((f) =>
     (f.key === 'vfx' ? `VFX: ${extraText(f, r.extra.vfx)}` : `${f.short || f.label} ${extraText(f, r.extra[f.key])}`)).join(' · ')
   const hasExtras = rows.some((r) => extrasOf(r))
-  const legend = [summary.circled && 'O em volta do take = circle take (escolhido)', summary.mos && 'MOS = sem som',
-    ...MARKS.filter((m) => rows.some((r) => r.marks.split(' ').includes(m.code))).map((m) => `${m.code} = ${m.title}`)]
+  const hasMarks = rows.some((r) => r.markNames)
+  const legend = [summary.circled && 'O em volta do número do take = take circulado (escolhido)']
     .filter(Boolean)
   if (legend.length) { doc.setTextColor(90, 90, 90); info(`Legenda: ${legend.join('  ·  ')}`); doc.setTextColor(0, 0, 0) }
   const startY = y + 2.5
 
-  const head = [[...(date ? [] : ['Data']), 'Cena', 'Plano', 'Take', 'Cam', ...(multi ? ['Multicam'] : []), 'Cartão', 'Clipe', 'Lente', 'T-Stop', 'Filtros',
+  const head = [[...(date ? [] : ['Data']), 'Cena', 'Plano', 'Take', ...(hasMarks ? ['Claquete'] : []), 'Cam', ...(multi ? ['Multicam'] : []), 'Cartão', 'Clipe', 'Lente', 'T-Stop', 'Filtros',
     'Foco', 'ISO', 'Shutter', 'FPS', 'WB', 'Som', 'Status', 'Hora', ...(hasExtras ? ['Extras'] : []), 'Notas pós / VFX']]
-  const body = rows.map((r) => [...(date ? [] : [r.date]), r.scene, r.shot, `${r.take}${r.marks ? `  ${r.marks}` : ''}`, r.camera,
-    ...(multi ? [r.multicam] : []), r.roll, r.clip, r.lens, r.tstop, r.filters, r.focus, r.iso, r.shutter, r.fps, r.wb, r.sound,
+  const body = rows.map((r) => [...(date ? [] : [r.date]), r.scene, r.shot, r.take, ...(hasMarks ? [r.markNames] : []), r.camera,
+    ...(multi ? [r.multicam] : []), r.roll, r.clip, r.lens, r.tstop, r.filters, r.focus, r.iso, r.shutter, r.fps, r.wb, r.sound === 'MOS' ? 'Não' : r.sound ? 'Sim' : '',
     STATUS_TXT[r.status] || '', r.time, ...(hasExtras ? [extrasOf(r)] : []),
     [r.notes, r.photos.length && `(${plural(r.photos.length, 'foto')})`].filter(Boolean).join(' ')].map(pdfSafe))
   const col = (name) => head[0].indexOf(name)
@@ -243,7 +244,7 @@ export async function buildPdf(projectId, date = null) {
     styles: { font: 'helvetica', fontSize: 7.5, cellPadding: 1.4, lineColor: [190, 190, 190], lineWidth: 0.15, valign: 'middle', overflow: 'linebreak' },
     headStyles: { fillColor: [30, 30, 33], textColor: [245, 179, 1], fontStyle: 'bold', fontSize: 7 },
     // colunas curtas nunca quebram ("21/09/2026", "CHECK", "A001C003"); só as de texto livre se ajustam à largura
-    columnStyles: Object.fromEntries(head[0].map((h, i) => [i, FLEX_COLS.has(h) ? {} : { cellWidth: 'wrap' }])),
+    columnStyles: Object.fromEntries(head[0].map((h, i) => [i, h === 'Claquete' ? { cellWidth: 17 } : h === 'Multicam' ? { cellWidth: 14 } : h === 'Extras' ? { minCellWidth: 34 } : FLEX_COLS.has(h) ? {} : { cellWidth: 'wrap' }])),
     didParseCell: (d) => {
       if (d.section !== 'body') return
       const r = rows[d.row.index]
@@ -265,7 +266,7 @@ export async function buildPdf(projectId, date = null) {
         if (r.sound === 'MOS') { d.cell.styles.fillColor = [250, 204, 21]; d.cell.styles.fontStyle = 'bold' }
         else d.cell.styles.textColor = [150, 150, 150]
       }
-      if (d.column.index <= (date ? 2 : 3) + (multi ? 1 : 0)) d.cell.styles.fontStyle = 'bold'
+      if (d.column.index <= (date ? 2 : 3) + (hasMarks ? 1 : 0) + (multi ? 1 : 0) && d.column.index !== col('Claquete')) d.cell.styles.fontStyle = 'bold'
     },
     // circle take: círculo em volta do número do take, como no boletim de papel
     didDrawCell: (d) => {
