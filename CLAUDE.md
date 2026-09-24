@@ -16,7 +16,11 @@ Contexto para o Claude Code continuar este projeto. Leia antes de mexer no códi
 - Supabase: projeto criado, `supabase/schema.sql` já executado, "Confirm email" desligado.
 - `public/config.js` preenchido (projeto `gfqfmepxcqrvsnhfdviv`) e build gerado em 24/09/2026.
 - **No ar:** https://setupfilmes.github.io/boletim/ (GitHub Pages, repo público `setupfilmes/boletim`).
-- **Pendente:** configurar "Site URL" no Supabase, instalar e testar no S25+, iPhone e iPad.
+- Supabase: `atualizacao-2026-09-24.sql` executado e Site URL configurada (24/09/2026). Keepalive testado (ok).
+- **Pendente (testes adiados pelo Antonio):** instalar/usar offline no S25+ (Chrome), iPhone e iPad; "Tornar dono"
+  com 2 contas; validar CSV DIT/ALE com um DIT ou no Resolve.
+- **Próxima conversa:** retomar lacunas e roadmap — restaurar backup (JSON), relatório por cartão, campo livre,
+  importar cenas, excluir conta pelo app, trazer testes Playwright para `tests/`.
 - Ainda **não testado com Supabase real nem em aparelho real** (Samsung S25+, iPhone, iPad).
 - A v1 (single-file, localStorage) foi abandonada; não há migração de dados dela.
 
