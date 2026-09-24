@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Btn, Sheet, TextArea, useDialog } from './ui'
-import { IconCamera, IconImage, IconTrash } from './icons'
+import { IconCamera, IconCheck, IconImage, IconTrash } from './icons'
 import { addPhotos, deletePhoto, setPhotoCaption, usePhotoUrl } from '../lib/photos'
 import { vibrate } from '../lib/util'
 
@@ -86,22 +86,36 @@ function PhotoViewer({ photo, caption, canEdit, onClose, onDelete }) {
   )
 }
 
-// Legenda / motivo: salva ao sair do campo e ao fechar a foto
+// Legenda / motivo: botão Salvar com confirmação visível. Se fechar sem salvar, salva mesmo assim e avisa.
 function CaptionEditor({ photo }) {
+  const { notify } = useDialog()
   const [text, setText] = useState(photo.caption || '')
-  const latest = useRef({ text, saved: photo.caption || '' })
-  latest.current.text = text
+  const [saved, setSaved] = useState(photo.caption || '')
+  const latest = useRef({ text, saved })
+  latest.current = { text, saved }
+  const dirty = text.trim() !== saved.trim()
   const save = () => {
-    const { text: t, saved } = latest.current
-    if (t.trim() === saved.trim()) return
-    latest.current.saved = t
-    setPhotoCaption(photo, t)
+    setPhotoCaption(photo, text)
+    setSaved(text)
+    vibrate()
   }
-  useEffect(() => save, []) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => {
+    const { text: t, saved: s } = latest.current
+    if (t.trim() === s.trim()) return
+    setPhotoCaption(photo, t)
+    notify('Legenda salva')
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <div className="mt-3">
-      <TextArea label="Legenda / motivo" rows={2} value={text} maxLength={500} onChange={(e) => setText(e.target.value)} onBlur={save}
+      <TextArea label="Legenda / motivo" rows={2} value={text} maxLength={500} onChange={(e) => setText(e.target.value)}
         placeholder="Por que esta foto? O que observar (continuidade, reflexo, marca, posição…)" data-testid="photo-caption" />
+      <div className="mt-2">
+        {dirty
+          ? <Btn full onClick={save} data-testid="photo-caption-save"><IconCheck /> Salvar legenda</Btn>
+          : saved.trim()
+            ? <div className="flex h-11 items-center justify-center gap-2 text-sm font-semibold text-good" data-testid="photo-caption-saved"><IconCheck size={18} /> Legenda salva</div>
+            : null}
+      </div>
     </div>
   )
 }
