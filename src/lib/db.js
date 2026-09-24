@@ -51,7 +51,7 @@ export const COLUMNS = {
     't_stop', 'filters', 'focus', 'iso', 'shutter', 'fps', 'wb', 'status', 'notes', 'recorded_at', 'created_by',
     'deleted', 'created_at', 'sound', 'circled', 'marks', 'extra'],
   kit_items: ['id', 'owner_id', 'category', 'value', 'sort_order', 'deleted', 'created_at'],
-  take_photos: ['id', 'project_id', 'take_id', 'path', 'width', 'height', 'created_by', 'deleted', 'created_at'],
+  take_photos: ['id', 'project_id', 'take_id', 'path', 'width', 'height', 'caption', 'created_by', 'deleted', 'created_at'],
 }
 
 export const TABLES = ['projects', 'kit_items', 'scenes', 'shots', 'takes', 'take_photos'] // ordem de envio: pais antes dos filhos

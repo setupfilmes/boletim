@@ -12,11 +12,13 @@ create table if not exists public.take_photos (
   path        text not null,
   width       int,
   height      int,
+  caption     text,
   created_by  uuid default auth.uid(),
   deleted     boolean not null default false,
   created_at  timestamptz not null default now(),
   updated_at  timestamptz not null default now()
 );
+alter table public.take_photos add column if not exists caption text; -- legenda / motivo da foto
 create index if not exists take_photos_project_idx on public.take_photos(project_id);
 create index if not exists take_photos_take_idx    on public.take_photos(take_id);
 create index if not exists take_photos_updated_idx on public.take_photos(updated_at);

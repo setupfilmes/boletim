@@ -1,7 +1,7 @@
-import { useState } from 'react'
-import { Btn, Sheet, useDialog } from './ui'
+import { useEffect, useRef, useState } from 'react'
+import { Btn, Sheet, TextArea, useDialog } from './ui'
 import { IconCamera, IconImage, IconTrash } from './icons'
-import { addPhotos, deletePhoto, usePhotoUrl } from '../lib/photos'
+import { addPhotos, deletePhoto, setPhotoCaption, usePhotoUrl } from '../lib/photos'
 import { vibrate } from '../lib/util'
 
 function Thumb({ photo, onClick }) {
@@ -11,6 +11,7 @@ function Thumb({ photo, onClick }) {
       aria-label="Ver foto" data-testid="photo-thumb">
       {url ? <img src={url} alt="" className="h-full w-full object-cover" />
         : <span className="flex h-full items-center justify-center text-[10px] text-muted">{failed ? 'offline' : '…'}</span>}
+      {photo.caption ? <span className="absolute bottom-0.5 left-0.5 rounded bg-black/70 px-1 text-[9px] leading-tight text-white" title={photo.caption}>Aa</span> : null}
       {photo._dirty ? <span className="absolute right-0.5 bottom-0.5 h-2 w-2 rounded-full bg-check" title="Ainda não enviada" /> : null}
     </button>
   )
@@ -20,7 +21,8 @@ function Thumb({ photo, onClick }) {
 export default function TakePhotos({ take, photos, canEdit, caption }) {
   const { notify, confirm } = useDialog()
   const [busy, setBusy] = useState(false)
-  const [open, setOpen] = useState(null)
+  const [openId, setOpenId] = useState(null)
+  const open = photos.find((p) => p.id === openId) || null
 
   const onFiles = async (e) => {
     const files = [...(e.target.files || [])]
@@ -28,9 +30,11 @@ export default function TakePhotos({ take, photos, canEdit, caption }) {
     if (!files.length) return
     setBusy(true)
     try {
-      await addPhotos(take, files)
+      const ids = await addPhotos(take, files)
       vibrate()
-      notify(files.length > 1 ? `${files.length} fotos adicionadas` : 'Foto adicionada')
+      // Uma foto só: já abre para escrever o motivo
+      if (ids.length === 1) setOpenId(ids[0])
+      else notify(`${files.length} fotos adicionadas`)
     } catch (err) {
       notify(`Não foi possível adicionar: ${err.message}`, 'error')
     } finally {
@@ -43,7 +47,7 @@ export default function TakePhotos({ take, photos, canEdit, caption }) {
     <div className="mt-2" data-testid="take-photos">
       <div className="mb-1 text-[11px] uppercase tracking-widest text-muted">Fotos{photos.length ? ` (${photos.length})` : ''}</div>
       <div className="flex gap-2 overflow-x-auto pb-1">
-        {photos.map((p) => <Thumb key={p.id} photo={p} onClick={() => setOpen(p)} />)}
+        {photos.map((p) => <Thumb key={p.id} photo={p} onClick={() => setOpenId(p.id)} />)}
         {canEdit && (
           <>
             <label className={pickBtn} aria-label="Tirar foto">
@@ -58,11 +62,11 @@ export default function TakePhotos({ take, photos, canEdit, caption }) {
         )}
         {!canEdit && !photos.length && <span className="py-4 text-sm text-muted/60">Sem fotos</span>}
       </div>
-      <PhotoViewer photo={open} caption={caption} canEdit={canEdit} onClose={() => setOpen(null)}
+      <PhotoViewer photo={open} caption={caption} canEdit={canEdit} onClose={() => setOpenId(null)}
         onDelete={async (p) => {
           if (await confirm({ title: 'Excluir foto', danger: true, confirmLabel: 'Excluir', message: 'Excluir esta foto de referência?' })) {
             await deletePhoto(p)
-            setOpen(null)
+            setOpenId(null)
             notify('Foto excluída')
           }
         }} />
@@ -76,13 +80,35 @@ function PhotoViewer({ photo, caption, canEdit, onClose, onDelete }) {
     <Sheet open onClose={onClose} title={caption || 'Foto'} tall
       footer={canEdit && <Btn variant="ghost" full className="text-ng" onClick={() => onDelete(photo)}><IconTrash /> Excluir foto</Btn>}>
       <FullPhoto photo={photo} />
+      {canEdit ? <CaptionEditor key={photo.id} photo={photo} />
+        : photo.caption && <p className="mt-3 whitespace-pre-wrap text-sm" data-testid="photo-caption-text">{photo.caption}</p>}
     </Sheet>
+  )
+}
+
+// Legenda / motivo: salva ao sair do campo e ao fechar a foto
+function CaptionEditor({ photo }) {
+  const [text, setText] = useState(photo.caption || '')
+  const latest = useRef({ text, saved: photo.caption || '' })
+  latest.current.text = text
+  const save = () => {
+    const { text: t, saved } = latest.current
+    if (t.trim() === saved.trim()) return
+    latest.current.saved = t
+    setPhotoCaption(photo, t)
+  }
+  useEffect(() => save, []) // eslint-disable-line react-hooks/exhaustive-deps
+  return (
+    <div className="mt-3">
+      <TextArea label="Legenda / motivo" rows={2} value={text} maxLength={500} onChange={(e) => setText(e.target.value)} onBlur={save}
+        placeholder="Por que esta foto? O que observar (continuidade, reflexo, marca, posição…)" data-testid="photo-caption" />
+    </div>
   )
 }
 
 function FullPhoto({ photo }) {
   const { url, failed } = usePhotoUrl(photo)
   if (failed) return <p className="py-10 text-center text-sm text-muted">Esta foto ainda não está neste aparelho. Conecte à internet para baixar.</p>
-  return url ? <img src={url} alt="" className="mx-auto max-h-[70dvh] w-auto max-w-full rounded-xl object-contain" data-testid="photo-full" />
+  return url ? <img src={url} alt="" className="mx-auto max-h-[50dvh] w-auto max-w-full rounded-xl object-contain" data-testid="photo-full" />
     : <p className="py-10 text-center text-sm text-muted">Carregando…</p>
 }

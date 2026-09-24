@@ -118,13 +118,28 @@ export async function reportData(projectId, date = null) {
 // Colunas do PDF que podem quebrar linha; as outras ficam com a largura do conteúdo
 const FLEX_COLS = new Set(['Filtros', 'Multicam', 'Extras', 'Notas pós / VFX'])
 
+// Aba aberta antes de uma atualização do app: os arquivos antigos já saíram do servidor.
+// Recarrega uma vez (os dados estão no aparelho) para pegar a versão nova.
+function staleBuild(err) {
+  if (/dynamically imported module|module script failed|Loading chunk/i.test(err?.message || '')) {
+    let last = 0
+    try { last = Number(sessionStorage.getItem('boletim.staleReload')) || 0 } catch { /* sem storage */ }
+    if (Date.now() - last > 30000) {
+      try { sessionStorage.setItem('boletim.staleReload', String(Date.now())) } catch { /* sem storage */ }
+      setTimeout(() => location.reload(), 1200)
+      throw new Error('o app foi atualizado. Recarregando — toque em Baixar de novo.')
+    }
+  }
+  throw err
+}
+
 const pdfSafe = (s) => String(s ?? '').replace(/∞/g, 'INF').replace(/[’‘]/g, "'").replace(/[“”]/g, '"')
   .replace(/[–—]/g, '-').replace(/[^\x00-\xFF]/g, '')
 
 export async function buildPdf(projectId, date = null) {
   // jsPDF só é carregado aqui (deixa a abertura do app mais leve). O arquivo separado
   // entra no precache do service worker, então funciona offline do mesmo jeito.
-  const [{ jsPDF }, { autoTable }] = await Promise.all([import('jspdf'), import('jspdf-autotable')])
+  const [{ jsPDF }, { autoTable }] = await Promise.all([import('jspdf'), import('jspdf-autotable')]).catch(staleBuild)
   const { project, rows, summary, fields } = await reportData(projectId, date)
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
   const W = doc.internal.pageSize.getWidth()
@@ -287,8 +302,8 @@ async function addPhotoPages(doc, rows, safe) {
   const COLS = 4
   const GAP = 6
   const cw = (W - 2 * M - GAP * (COLS - 1)) / COLS
-  const ih = cw * 0.68
-  const ch = ih + 9
+  const ih = cw * 0.56
+  const ch = ih + 19 // identificação + até 3 linhas de legenda
   let missing = 0
   let i = 0
   const newPage = () => {
@@ -316,6 +331,12 @@ async function addPhotoPages(doc, rows, safe) {
     doc.text(safe(`${r.slate}  ·  Take ${r.take}${r.camera ? `  ·  Cam ${r.camera}` : ''}`), x, y + ih + 4)
     doc.setFont('helvetica', 'normal'); doc.setFontSize(7); doc.setTextColor(90, 90, 90)
     doc.text(safe([r.date, r.time, STATUS_TXT[r.status], r.circled && 'circulado'].filter(Boolean).join('  ·  ')), x, y + ih + 7.5)
+    if (p.caption) {
+      doc.setFont('helvetica', 'italic'); doc.setFontSize(7.5); doc.setTextColor(0, 0, 0)
+      const lines = doc.splitTextToSize(safe(p.caption), cw)
+      if (lines.length > 3) { lines.length = 3; lines[2] = `${lines[2].slice(0, -3)}...` }
+      doc.text(lines, x, y + ih + 11.5)
+    }
     i++
   }
   if (missing) {
@@ -331,10 +352,11 @@ export async function buildCsv(projectId, date = null) {
     ['camera', 'Câmera'], ['multicam', 'Multicam'], ['roll', 'Cartão'], ['clip', 'Clipe'], ['lens', 'Lente'], ['tstop', 'T-Stop'], ['filters', 'Filtros'],
     ['focus', 'Foco'], ['iso', 'ISO'], ['shutter', 'Shutter'], ['fps', 'FPS'], ['wb', 'WB'], ['sound', 'Som'], ['circled', 'Circle'],
     ['marks', 'Marcações'], ['status', 'Status'], ['time', 'Hora'], ...fields.map((f) => [`x:${f.key}`, f.label]), ['notes', 'Notas pós/VFX'],
-    ['photoCount', 'Fotos']]
+    ['photoCount', 'Fotos'], ['photoCaptions', 'Legendas das fotos']]
   const esc = csvEscape(';')
   const val = (r, k) => (k === 'status' ? STATUS_TXT[r.status] || '' : k === 'circled' ? (r.circled ? 'Sim' : '')
     : k === 'photoCount' ? r.photos.length || ''
+    : k === 'photoCaptions' ? r.photos.map((p) => p.caption).filter(Boolean).join(' | ')
     : k.startsWith('x:') ? extraText(extraField(k.slice(2)), r.extra[k.slice(2)]) : r[k])
   const lines = [cols.map((c) => c[1]).join(';')]
   for (const r of rows) lines.push(cols.map(([k]) => esc(val(r, k))).join(';'))

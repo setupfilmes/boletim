@@ -152,6 +152,11 @@ a versão do Dexie em `openDb()` (`db.version(2).stores(...)` — nunca editar a
 - Visualização baixa sob demanda (`getPhotoBlob`) e guarda em `photo_blobs` para ver offline depois.
 - PDF: páginas finais "Fotos de referência" (12/página, legenda plano · take · câmera · hora · status); fotos que
   não estão no aparelho (offline) ficam de fora com aviso. Notas do take ganham "(n fotos)"; CSV tem coluna Fotos.
+- Legenda / motivo por foto (`take_photos.caption`, até 500 caracteres): ao adicionar UMA foto o visualizador abre
+  direto no campo; salva ao sair do campo/fechar. Miniatura com legenda mostra "Aa". PDF: até 3 linhas em itálico
+  sob a foto; CSV: coluna "Legendas das fotos" (separadas por " | ").
+- Aba antiga após deploy (lazy chunk do jsPDF sumiu): `vite:preloadError` em main.jsx e `staleBuild` em export.js
+  recarregam a página uma vez (trava de 30 s em sessionStorage `boletim.staleReload`).
 
 ## Operação
 

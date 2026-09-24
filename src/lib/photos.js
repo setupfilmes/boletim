@@ -29,15 +29,21 @@ async function compress(file) {
 
 export async function addPhotos(take, files) {
   const db = getDb()
+  const ids = []
   for (const file of files) {
     const { blob, width, height } = await compress(file)
     const id = uuid()
     const path = `${take.project_id}/${take.id}/${id}.jpg`
     await db.photo_blobs.put({ id, blob, pending: 1 })
     await create('take_photos', { id, project_id: take.project_id, take_id: take.id, path, width, height, created_by: currentUserId() })
+    ids.push(id)
   }
   scheduleSync()
+  return ids
 }
+
+// Legenda / motivo da foto ("reflexo no vidro à esquerda", "posição do copo")
+export const setPhotoCaption = (photo, caption) => update('take_photos', photo.id, { caption: caption.trim() || null })
 
 // Foto que nunca subiu some só do aparelho; a que já está na nuvem é marcada como excluída (a sync apaga o arquivo)
 export async function deletePhoto(photo) {
