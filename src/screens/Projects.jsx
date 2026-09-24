@@ -50,7 +50,7 @@ export default function Projects() {
                 const p = await createDemoProject(user?.name)
                 notify('Projeto de demonstração criado')
                 nav(`/p/${p.id}?tab=diarias`)
-              }} data-testid="empty-demo">Ver demonstração preenchida (4 diárias)</Btn>
+              }} data-testid="empty-demo">Ver demonstração preenchida (5 diárias)</Btn>
             </div>
           </Empty>
         )}

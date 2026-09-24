@@ -179,8 +179,11 @@ a versão do Dexie em `openDb()` (`db.version(2).stores(...)` — nunca editar a
   no 1º take do plano, do último take do **mesmo projeto**; projeto novo começa em branco — decisão de produto).
   Clipe: `incrCode()` do take gravado por último no **mesmo cartão** (qualquer plano); se esse take não tem clipe,
   o novo vem vazio (não "pula" números com base em takes antigos).
-- `src/lib/demo.js` — `createDemoProject()`: projeto fictício "Noite Adentro" com 4 diárias (terminando hoje): 1 câmera,
-  A+B no mesmo plano, planos vinculados, slow motion, status e notas. Botão em Conta → Demonstração.
+- `src/lib/demo.js` — `createDemoProject()`: projeto fictício "Noite Adentro" com 5 diárias (terminando hoje), 14 cenas
+  todas filmadas, ~100 registros: 1 a 3 câmeras (C = crash cam no carro), planos vinculados, 2ª unidade, slow motion
+  (B a 120 fps, A a 48), todas as marcações de claquete, VFX, todos os campos extras ligados (TC in/out em jam sync),
+  nota em todo take (`AUTO_NOTES` quando o roteiro não traz), último take de hoje sem status, e 16 fotos de referência
+  com legenda desenhadas em canvas (`drawRef`, 1280×720, ~20 KB). Botão em Conta → Demonstração e na lista vazia.
 - `src/lib/export.js` — PDF (A4 paisagem) / CSV (`;` + BOM para Excel pt-BR) / backup JSON, tudo no aparelho.
   jsPDF usa Helvetica (Latin-1): `pdfSafe()` troca `∞` por `INF` etc. jsPDF é carregado com `import()` dentro de
   `buildPdf()` (bundle inicial menor); o chunk entra no precache do SW, então o PDF continua funcionando offline.

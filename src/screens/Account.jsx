@@ -76,7 +76,7 @@ export default function Account() {
           <div className="mb-3 text-xs uppercase tracking-widest text-muted">Demonstração</div>
           <Btn variant="surface" full data-testid="create-demo" onClick={async () => {
             if (!(await confirm({ title: 'Projeto de demonstração', confirmLabel: 'Criar',
-              message: 'Cria o projeto fictício “Noite Adentro” com 4 diárias preenchidas (1 câmera, A+B, planos vinculados) para ver o app e os relatórios. Pode excluir depois em Info → Excluir projeto.' }))) return
+              message: 'Cria o projeto fictício “Noite Adentro” com 5 diárias preenchidas (1 a 3 câmeras, planos vinculados, fotos de referência) para ver o app e os relatórios. Pode excluir depois em Info → Excluir projeto.' }))) return
             const p = await createDemoProject(user?.name)
             notify('Projeto de demonstração criado')
             nav(`/p/${p.id}?tab=diarias`)
