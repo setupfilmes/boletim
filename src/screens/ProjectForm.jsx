@@ -92,7 +92,7 @@ export default function ProjectForm({ open, onClose, project, onSaved }) {
         <TextInput label="Produtora" value={f.company || ''} onChange={set('company')} />
         <div className="grid grid-cols-2 gap-3">
           <TextInput label="Direção" value={f.director || ''} onChange={set('director')} />
-          <TextInput label="Dir. Fotografia" value={f.dop || ''} onChange={set('dop')} />
+          <TextInput label="Dir. de foto" value={f.dop || ''} onChange={set('dop')} />
           <TextInput label="1º AC" value={f.first_ac || ''} onChange={set('first_ac')} />
           <TextInput label="2º AC" value={f.second_ac || ''} onChange={set('second_ac')} />
           <TextInput label="DIT / Logger" value={f.logger || ''} onChange={set('logger')} />

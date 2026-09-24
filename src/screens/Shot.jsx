@@ -7,7 +7,7 @@ import TakePhotos from '../components/TakePhotos'
 import { useTakePhotos } from '../lib/photos'
 import { useProject, useScene, useShot, useTakesByShots, useTakesByProject, useKit, useRole, kitOptions, useShots } from '../lib/hooks'
 import { createNextTake, addCameraToTake, deleteTakes, update, updateExtra } from '../lib/repo'
-import { projectFields, extraField, extraText, isEmpty, MARKS, SOUND, markLabel, formatTc } from '../lib/fields'
+import { projectFields, extraField, extraText, isEmpty, MARKS, SOUND, markCode, formatTc } from '../lib/fields'
 import { groupTakes, isMulticam, projectCameras, cameraOrder, linkedShots, shotCameras, shotLabel } from '../lib/cameras'
 import { useAuth } from '../auth'
 import { fmtDate, fmtTime, joinFilters, vibrate, incrCode } from '../lib/util'
@@ -329,7 +329,7 @@ function TakeCard({ group, take: t, multi, cams, project, canEdit, onCam, onAddC
               <button key={k} disabled={d} aria-pressed={on} onClick={() => !on && onSet('sound', k)} data-testid={`sound-${k}`}
                 className={`min-h-11 rounded-xl border-2 font-mono text-sm font-medium ${
                   on ? 'border-accent bg-accent font-bold text-accent-ink' : 'border-line text-muted'}`}>
-                {lab}{k === 'mos' ? ' · sem som' : ''}
+                {lab}
               </button>
             )
           })}
@@ -342,13 +342,13 @@ function TakeCard({ group, take: t, multi, cams, project, canEdit, onCam, onAddC
             <button key={m.key} title={`${m.code}: ${m.title}`} disabled={d} aria-pressed={marks.includes(m.key)} onClick={() => toggleMark(m.key)}
               className={`min-h-10 rounded-lg border-2 px-3 text-sm ${
                 marks.includes(m.key) ? 'border-accent bg-accent font-medium text-accent-ink' : 'border-line text-muted'}`}>
-              {m.label}
+              <span className="font-mono font-bold">{m.code}</span> {m.label}
             </button>
           ))}
         </div>
       </div>
       <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-4">
-        <Chip label="Cartão / Rolo" value={t.roll} onClick={() => onText('roll')} disabled={d} />
+        <Chip label="Rolo" value={t.roll} onClick={() => onText('roll')} disabled={d} />
         <Chip label="Clipe" value={t.clip} onClick={() => onText('clip')} disabled={d} />
         <button onClick={() => onText('notes')} disabled={d}
           className="col-span-2 block min-h-16 rounded-xl border-2 border-dashed border-line px-3 py-1 text-left">
@@ -404,7 +404,7 @@ function TakeRow({ group, multi, onClick, onStatus, photoCount = 0 }) {
   const flags = [
     group.rows.some((r) => r.circled) && '★',
     group.rows.some((r) => r.sound === 'mos') && 'MOS',
-    ...[...new Set(group.rows.flatMap((r) => r.marks || []))].map(markLabel),
+    ...[...new Set(group.rows.flatMap((r) => r.marks || []))].map(markCode),
     photoCount && `📷${photoCount}`,
   ].filter(Boolean).join(' ')
   return (
@@ -425,7 +425,7 @@ function TakeRow({ group, multi, onClick, onStatus, photoCount = 0 }) {
 }
 
 const TEXT_FIELDS = {
-  roll: { title: 'Cartão / Rolo', placeholder: 'A001' },
+  roll: { title: 'Rolo', placeholder: 'A001' },
   clip: { title: 'Clipe', placeholder: 'A001C003' },
   notes: { title: 'Notas de pós / VFX', placeholder: 'Ex: tracking markers no fundo, flare no final…', multiline: true },
 }

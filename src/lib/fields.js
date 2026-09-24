@@ -3,10 +3,10 @@
 // Som do take (padrão da indústria: todo boletim diz se teve som)
 export const SOUND = { sync: 'SYNC', mos: 'MOS' }
 
-// Marcações de claquete (takes.marks = ['pu', 'ser', …]). Na tela: nome em português. No PDF/CSV/ALE: a sigla
-// internacional que o montador reconhece (Pickup, Series, Tail slate, After False Start, No Slate), com legenda.
+// Marcações de claquete (takes.marks = ['pu', 'ser', …]). Tela e PDF: sigla internacional + nome ("PU Pickup");
+// CSV/DIT/ALE: só a sigla (Pickup, Series, Tail slate, After False Start, No Slate).
 export const MARKS = [
-  { key: 'pu', code: 'P/U', label: 'Pickup', title: 'retomada a partir de um trecho do take (pickup)' },
+  { key: 'pu', code: 'PU', label: 'Pickup', title: 'retomada a partir de um trecho do take (pickup)' },
   { key: 'ser', code: 'SER', label: 'Série', title: 'vários takes seguidos sem nova claquete (series)' },
   { key: 'tail', code: 'TAIL', label: 'Claquete no fim', title: 'claquete batida no final do take (tail slate)' },
   { key: 'afs', code: 'AFS', label: 'Recomeço', title: 'recomeçou sem cortar a câmera (after false start)' },
@@ -14,6 +14,7 @@ export const MARKS = [
 ]
 export const markCode = (k) => MARKS.find((m) => m.key === k)?.code || k
 export const markLabel = (k) => MARKS.find((m) => m.key === k)?.label || k
+export const markFull = (k) => { const m = MARKS.find((x) => x.key === k); return m ? `${m.code} ${m.label}` : k }
 
 // Campos extras ligados por projeto (project.kit.fields = ['tc_in', 'lut', …]); valores em takes.extra = { lut: 'K1S1' }.
 // sticky: vem preenchido do take anterior da mesma câmera (como lente e T-stop).

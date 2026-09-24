@@ -2,7 +2,7 @@
 import { getDb } from './db'
 import { natCompare, fmtDate, fmtTime, joinFilters, plural } from './util'
 import { cameraOrder, projectCameras, takeKey, shotLabel } from './cameras'
-import { EXTRA_FIELDS, extraField, extraText, isEmpty, markCode, markLabel, SOUND } from './fields'
+import { EXTRA_FIELDS, extraField, extraText, isEmpty, markCode, markFull, SOUND } from './fields'
 import { photoDataUrl } from './photos'
 
 const STATUS_TXT = { good: 'GOOD', ng: 'NG', check: 'CHECK' }
@@ -80,7 +80,7 @@ export async function reportData(projectId, date = null) {
     sound: SOUND[t.sound] || '',
     circled: !!t.circled,
     marks: (t.marks || []).map(markCode).join(' '), // siglas internacionais (CSV / DIT / ALE)
-    markNames: (t.marks || []).map(markLabel).join(', '), // nomes em português (PDF)
+    markNames: (t.marks || []).map(markFull).join(', '), // sigla + nome (PDF)
     extra: t.extra || {},
   }))
   // planos que rodaram com mais de uma câmera, na ordem do relatório: "1.1 (A+B)", "12A+12B (A+B)"
@@ -167,7 +167,7 @@ export async function buildPdf(projectId, date = null) {
   // Equipe e resumo
   doc.setTextColor(0, 0, 0)
   doc.setFontSize(8.5)
-  const crew = [['Direção', project.director], ['Dir. Fotografia', project.dop], ['1º AC', project.first_ac],
+  const crew = [['Direção', project.director], ['Dir. de foto', project.dop], ['1º AC', project.first_ac],
     ['2º AC', project.second_ac], ['DIT / Logger', project.logger]].filter(([, v]) => v)
   let x = M
   for (const [k, v] of crew) {
@@ -180,9 +180,9 @@ export async function buildPdf(projectId, date = null) {
   const multi = summary.multicamTakes > 0
   const sum = `${plural(summary.takes, 'take')}${summary.records !== summary.takes ? ` (${summary.records} registros de câmera)` : ''}`
     + `  ·  ${plural(summary.scenes, 'cena')}  ·  ${plural(summary.shots, 'plano')}  ·  GOOD ${summary.good}  ·  NG ${summary.ng}  ·  CHECK ${summary.check}`
-    + (summary.circled ? `  ·  Circulados ${summary.circled}` : '') + (summary.mos ? `  ·  Sem som ${summary.mos}` : '')
+    + (summary.circled ? `  ·  Circulados ${summary.circled}` : '') + (summary.mos ? `  ·  MOS ${summary.mos}` : '')
     + (summary.photos ? `  ·  ${plural(summary.photos, 'foto')}` : '')
-    + (summary.rolls.length ? `  ·  Cartões: ${summary.rolls.join(', ')}` : '')
+    + (summary.rolls.length ? `  ·  Rolos: ${summary.rolls.join(', ')}` : '')
   doc.setFontSize(8)
   let y = 35.5
   for (const line of doc.splitTextToSize(pdfSafe(sum), W - 2 * M)) { doc.text(line, M, y); y += 3.6 }
@@ -220,10 +220,10 @@ export async function buildPdf(projectId, date = null) {
   if (legend.length) { doc.setTextColor(90, 90, 90); info(`Legenda: ${legend.join('  ·  ')}`); doc.setTextColor(0, 0, 0) }
   const startY = y + 2.5
 
-  const head = [[...(date ? [] : ['Data']), 'Cena', 'Plano', 'Take', ...(hasMarks ? ['Claquete'] : []), 'Cam', ...(multi ? ['Multicam'] : []), 'Cartão', 'Clipe', 'Lente', 'T-Stop', 'Filtros',
+  const head = [[...(date ? [] : ['Data']), 'Cena', 'Plano', 'Take', ...(hasMarks ? ['Claquete'] : []), 'Cam', ...(multi ? ['Multicam'] : []), 'Rolo', 'Clipe', 'Lente', 'T-Stop', 'Filtros',
     'Foco', 'ISO', 'Shutter', 'FPS', 'WB', 'Som', 'Status', 'Hora', ...(hasExtras ? ['Extras'] : []), 'Notas pós / VFX']]
   const body = rows.map((r) => [...(date ? [] : [r.date]), r.scene, r.shot, r.take, ...(hasMarks ? [r.markNames] : []), r.camera,
-    ...(multi ? [r.multicam] : []), r.roll, r.clip, r.lens, r.tstop, r.filters, r.focus, r.iso, r.shutter, r.fps, r.wb, r.sound === 'MOS' ? 'Não' : r.sound ? 'Sim' : '',
+    ...(multi ? [r.multicam] : []), r.roll, r.clip, r.lens, r.tstop, r.filters, r.focus, r.iso, r.shutter, r.fps, r.wb, r.sound,
     STATUS_TXT[r.status] || '', r.time, ...(hasExtras ? [extrasOf(r)] : []),
     [r.notes, r.photos.length && `(${plural(r.photos.length, 'foto')})`].filter(Boolean).join(' ')].map(pdfSafe))
   const col = (name) => head[0].indexOf(name)
@@ -244,7 +244,7 @@ export async function buildPdf(projectId, date = null) {
     styles: { font: 'helvetica', fontSize: 7.5, cellPadding: 1.4, lineColor: [190, 190, 190], lineWidth: 0.15, valign: 'middle', overflow: 'linebreak' },
     headStyles: { fillColor: [30, 30, 33], textColor: [245, 179, 1], fontStyle: 'bold', fontSize: 7 },
     // colunas curtas nunca quebram ("21/09/2026", "CHECK", "A001C003"); só as de texto livre se ajustam à largura
-    columnStyles: Object.fromEntries(head[0].map((h, i) => [i, h === 'Claquete' ? { cellWidth: 17 } : h === 'Multicam' ? { cellWidth: 14 } : h === 'Extras' ? { minCellWidth: 34 } : FLEX_COLS.has(h) ? {} : { cellWidth: 'wrap' }])),
+    columnStyles: Object.fromEntries(head[0].map((h, i) => [i, h === 'Claquete' ? { cellWidth: 17 } : h === 'Multicam' ? { cellWidth: 14 } : h === 'Extras' ? { minCellWidth: 30 } : FLEX_COLS.has(h) ? {} : { cellWidth: 'wrap' }])),
     didParseCell: (d) => {
       if (d.section !== 'body') return
       const r = rows[d.row.index]
@@ -350,8 +350,8 @@ async function addPhotoPages(doc, rows, safe) {
 export async function buildCsv(projectId, date = null) {
   const { project, rows, fields } = await reportData(projectId, date)
   const cols = [['date', 'Data'], ['scene', 'Cena'], ['shot', 'Plano'], ['shotType', 'Enquadramento'], ['take', 'Take'],
-    ['camera', 'Câmera'], ['multicam', 'Multicam'], ['roll', 'Cartão'], ['clip', 'Clipe'], ['lens', 'Lente'], ['tstop', 'T-Stop'], ['filters', 'Filtros'],
-    ['focus', 'Foco'], ['iso', 'ISO'], ['shutter', 'Shutter'], ['fps', 'FPS'], ['wb', 'WB'], ['sound', 'Som'], ['circled', 'Circle'],
+    ['camera', 'Cam'], ['multicam', 'Multicam'], ['roll', 'Rolo'], ['clip', 'Clipe'], ['lens', 'Lente'], ['tstop', 'T-Stop'], ['filters', 'Filtros'],
+    ['focus', 'Foco'], ['iso', 'ISO'], ['shutter', 'Shutter'], ['fps', 'FPS'], ['wb', 'WB'], ['sound', 'Som'], ['circled', 'Circulado'],
     ['marks', 'Marcações'], ['status', 'Status'], ['time', 'Hora'], ...fields.map((f) => [`x:${f.key}`, f.label]), ['notes', 'Notas pós/VFX'],
     ['photoCount', 'Fotos'], ['photoCaptions', 'Legendas das fotos']]
   const esc = csvEscape(';')

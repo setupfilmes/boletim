@@ -50,7 +50,7 @@ export default function Reports({ project }) {
         <IconFile size={18} /> Baixar
       </Btn>
       <Btn size="sm" variant="surface" onClick={() => run(`${id}-csv`, buildCsv, date, 'share')} disabled={!!busy} data-testid={`csv-${id}`}>
-        CSV
+        Planilha
       </Btn>
       <Btn size="sm" variant="ghost" className="col-span-3" disabled={!!busy} data-testid={`dit-${id}`}
         onClick={() => actionSheet('Arquivos para DIT / pós', [

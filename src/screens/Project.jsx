@@ -196,7 +196,7 @@ function InfoTab({ project, role, onDeleted }) {
   const { confirm, notify } = useDialog()
   const rows = [
     ['Nome do projeto', project.title], ['Tipo', project.production_type], ['Produtora', project.company], ['Direção', project.director],
-    ['Dir. Fotografia', project.dop], ['1º AC', project.first_ac], ['2º AC', project.second_ac],
+    ['Dir. de foto', project.dop], ['1º AC', project.first_ac], ['2º AC', project.second_ac],
     ['DIT / Logger', project.logger], ['Câmera', project.camera_body],
     ['Lentes do projeto', (project.kit?.lens || []).join(', ') || 'Kit inteiro'],
     ['Filtros do projeto', (project.kit?.filter || []).join(', ') || 'Kit inteiro'],
