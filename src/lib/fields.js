@@ -3,14 +3,16 @@
 // Som do take (padrão da indústria: todo boletim diz se teve som)
 export const SOUND = { sync: 'SYNC', mos: 'MOS' }
 
-// Marcações de claquete (takes.marks = ['pu', 'ser', …])
+// Marcações de claquete (takes.marks = ['pu', 'ser', …]). Na tela: nome em português. No PDF/CSV/ALE: a sigla
+// internacional que o montador reconhece (Pickup, Series, Tail slate, After False Start, No Slate), com legenda.
 export const MARKS = [
-  { key: 'pu', label: 'P/U', title: 'Pickup — retomada a partir de um trecho' },
-  { key: 'ser', label: 'SER', title: 'Série — vários takes sem nova claquete' },
-  { key: 'tail', label: 'TAIL', title: 'Claquete no final (tail slate)' },
-  { key: 'afs', label: 'AFS', title: 'After false start — recomeçou sem cortar' },
-  { key: 'ns', label: 'S/ CLAQ', title: 'Sem claquete' },
+  { key: 'pu', code: 'P/U', label: 'Pickup', title: 'retomada a partir de um trecho do take (pickup)' },
+  { key: 'ser', code: 'SER', label: 'Série', title: 'vários takes seguidos sem nova claquete (series)' },
+  { key: 'tail', code: 'TAIL', label: 'Claquete no fim', title: 'claquete batida no final do take (tail slate)' },
+  { key: 'afs', code: 'AFS', label: 'Recomeço', title: 'recomeçou sem cortar a câmera (after false start)' },
+  { key: 'ns', code: 'NS', label: 'Sem claquete', title: 'take sem claquete (no slate)' },
 ]
+export const markCode = (k) => MARKS.find((m) => m.key === k)?.code || k
 export const markLabel = (k) => MARKS.find((m) => m.key === k)?.label || k
 
 // Campos extras ligados por projeto (project.kit.fields = ['tc_in', 'lut', …]); valores em takes.extra = { lut: 'K1S1' }.

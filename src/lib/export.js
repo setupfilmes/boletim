@@ -2,7 +2,7 @@
 import { getDb } from './db'
 import { natCompare, fmtDate, fmtTime, joinFilters, plural } from './util'
 import { cameraOrder, projectCameras, takeKey, shotLabel } from './cameras'
-import { EXTRA_FIELDS, extraField, extraText, isEmpty, markLabel, MARKS, SOUND } from './fields'
+import { EXTRA_FIELDS, extraField, extraText, isEmpty, markCode, MARKS, SOUND } from './fields'
 
 const STATUS_TXT = { good: 'GOOD', ng: 'NG', check: 'CHECK' }
 const STATUS_RGB = { good: [34, 197, 94], ng: [239, 68, 68], check: [250, 204, 21] }
@@ -72,7 +72,7 @@ export async function reportData(projectId, date = null) {
     slate: label(t.shot_id),
     sound: SOUND[t.sound] || '',
     circled: !!t.circled,
-    marks: (t.marks || []).map(markLabel).join(' '),
+    marks: (t.marks || []).map(markCode).join(' '),
     extra: t.extra || {},
   }))
   // planos que rodaram com mais de uma câmera, na ordem do relatório: "1.1 (A+B)", "12A+12B (A+B)"
@@ -190,7 +190,7 @@ export async function buildPdf(projectId, date = null) {
     (f.key === 'vfx' ? `VFX: ${extraText(f, r.extra.vfx)}` : `${f.short || f.label} ${extraText(f, r.extra[f.key])}`)).join(' · ')
   const hasExtras = rows.some((r) => extrasOf(r))
   const legend = [summary.circled && 'O em volta do take = circle take (escolhido)', summary.mos && 'MOS = sem som',
-    ...MARKS.filter((m) => rows.some((r) => r.marks.split(' ').includes(m.label))).map((m) => `${m.label} = ${m.title.split(' — ')[0].toLowerCase()}`)]
+    ...MARKS.filter((m) => rows.some((r) => r.marks.split(' ').includes(m.code))).map((m) => `${m.code} = ${m.title}`)]
     .filter(Boolean)
   if (legend.length) { doc.setTextColor(90, 90, 90); info(`Legenda: ${legend.join('  ·  ')}`); doc.setTextColor(0, 0, 0) }
   const startY = y + 2.5

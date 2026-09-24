@@ -290,10 +290,10 @@ function TakeCard({ group, take: t, multi, cams, project, canEdit, onCam, onAddC
     <Card className="border-accent p-3" data-testid="take-card">
       <div className="mb-3 flex items-center gap-2">
         <div className="font-display text-3xl font-extrabold">TAKE {t.take_number}</div>
-        <div className="min-w-0 flex-1 font-mono text-xs text-muted">
-          {fmtTime(t.recorded_at)} · {fmtDate(t.shoot_date)}
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-1 font-mono text-xs text-muted">
+          <span>{fmtTime(t.recorded_at)} · {fmtDate(t.shoot_date)}</span>
           {group.rows.length > 1 && (
-            <span className="ml-1 rounded border border-accent px-1 text-accent">
+            <span className="rounded border border-accent px-1 text-accent">
               {group.rows.map((r) => r.camera).join('+')}
             </span>
           )}
@@ -303,28 +303,43 @@ function TakeCard({ group, take: t, multi, cams, project, canEdit, onCam, onAddC
       {(multi || group.rows.length > 1) && (
         <CameraTabs group={group} take={t} cams={cams} project={project} canEdit={canEdit} onCam={onCam} onAddCam={onAddCam} shotName={shotName} />
       )}
-      <StatusButtons value={t.status} onChange={canEdit ? onStatus : null} />
-      <div className="mt-2 grid grid-cols-2 gap-2">
-        <button onClick={() => onSet('sound', t.sound === 'mos' ? 'sync' : 'mos')} disabled={d} data-testid="sound"
-          aria-label={`Som: ${SOUND[t.sound] || 'SYNC'} (tocar para trocar)`}
-          className={`flex min-h-12 items-center justify-center gap-2 rounded-xl border-2 font-mono font-medium ${
-            t.sound === 'mos' ? 'border-check bg-check text-black' : 'border-line bg-surface2 text-ink'}`}>
-          <span className="text-[11px] uppercase tracking-widest opacity-70">Som</span>{SOUND[t.sound] || 'SYNC'}
-        </button>
+      <div className="flex gap-2">
+        <div className="min-w-0 flex-1"><StatusButtons value={t.status} onChange={canEdit ? onStatus : null} /></div>
+        {/* circle take: o take escolhido (diretor/DoP) — é diferente de GOOD */}
         <button onClick={() => onSet('circled', !t.circled)} disabled={d} data-testid="circle" aria-pressed={!!t.circled}
-          className={`flex min-h-12 items-center justify-center gap-2 rounded-xl border-2 font-display font-bold ${
+          aria-label={t.circled ? 'Take circulado (tocar para desmarcar)' : 'Circular take (escolhido)'}
+          className={`flex min-h-14 w-20 shrink-0 flex-col items-center justify-center rounded-xl border-2 ${
             t.circled ? 'border-accent bg-accent text-accent-ink' : 'border-line bg-surface2 text-muted'}`}>
-          <span className="text-lg leading-none">{t.circled ? '★' : '☆'}</span> CIRCLE
+          <span className="text-2xl leading-none">{t.circled ? '★' : '☆'}</span>
+          <span className="mt-0.5 font-mono text-[10px] font-medium uppercase">{t.circled ? 'Circulado' : 'Circular'}</span>
         </button>
       </div>
-      <div className="mt-2 flex flex-wrap gap-2" data-testid="marks">
-        {MARKS.map((m) => (
-          <button key={m.key} title={m.title} disabled={d} aria-pressed={marks.includes(m.key)} onClick={() => toggleMark(m.key)}
-            className={`min-h-10 rounded-lg border-2 px-3 font-mono text-xs font-medium ${
-              marks.includes(m.key) ? 'border-accent bg-accent text-accent-ink' : 'border-line text-muted'}`}>
-            {m.label}
-          </button>
-        ))}
+      <div className="mt-3">
+        <div className="mb-1 text-[11px] uppercase tracking-widest text-muted">Som</div>
+        <div className="grid grid-cols-2 gap-2" data-testid="sound" role="group" aria-label="Som">
+          {Object.entries(SOUND).map(([k, lab]) => {
+            const on = (t.sound || 'sync') === k
+            return (
+              <button key={k} disabled={d} aria-pressed={on} onClick={() => !on && onSet('sound', k)} data-testid={`sound-${k}`}
+                className={`min-h-11 rounded-xl border-2 font-mono text-sm font-medium ${
+                  on ? (k === 'mos' ? 'border-check bg-check text-black' : 'border-accent bg-surface2 text-ink') : 'border-line text-muted'}`}>
+                {lab}{k === 'mos' ? ' · sem som' : ''}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+      <div className="mt-3">
+        <div className="mb-1 text-[11px] uppercase tracking-widest text-muted">Claquete</div>
+        <div className="flex flex-wrap gap-2" data-testid="marks">
+          {MARKS.map((m) => (
+            <button key={m.key} title={`${m.code}: ${m.title}`} disabled={d} aria-pressed={marks.includes(m.key)} onClick={() => toggleMark(m.key)}
+              className={`min-h-10 rounded-lg border-2 px-3 text-sm ${
+                marks.includes(m.key) ? 'border-accent bg-accent font-medium text-accent-ink' : 'border-line text-muted'}`}>
+              {m.label}
+            </button>
+          ))}
+        </div>
       </div>
       <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-4">
         <Chip label="Cartão / Rolo" value={t.roll} onClick={() => onText('roll')} disabled={d} />

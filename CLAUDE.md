@@ -116,7 +116,7 @@ a versão do Dexie em `openDb()` (`db.version(2).stores(...)` — nunca editar a
 ## Padrão da indústria no take (`src/lib/fields.js`)
 
 - `takes.sound` ('sync'|'mos', grudado; padrão 'sync'), `takes.circled` (circle take = escolhido; ≠ GOOD),
-  `takes.marks` (['pu','ser','tail','afs','ns'] = P/U, SER, TAIL, AFS, S/ CLAQ), `takes.extra` (objeto com os
+  `takes.marks` (['pu','ser','tail','afs','ns']), `takes.extra` (objeto com os
   campos extras). Colunas criadas por `supabase/atualizacao-2026-09-24.sql` (também no `schema.sql`).
 - Campos extras ligados por projeto em `project.kit.fields` (catálogo `EXTRA_FIELDS`: TC in/out, ND interno, LUT,
   codec, resolução, unidade, altura da lente, tilt, distância, VFX). `sticky` = vem do take anterior da mesma
@@ -131,6 +131,9 @@ a versão do Dexie em `openDb()` (`db.version(2).stores(...)` — nunca editar a
   (Avid Log Exchange, TAB; Name = clipe, Start/End = TC, Tracks V/VA1A2). **Não há formato público oficial do
   Silverstack — validar com um DIT real antes de prometer.**
 - Letras de plano pulam I e O (`nextCode`).
+- Nomenclatura (decisão do Antonio): **na tela, português** — marcações "Pickup · Série · Claquete no fim ·
+  Recomeço · Sem claquete", som "SYNC / MOS · sem som", ★ "Circular/Circulado" na mesma linha de GOOD/NG/CHECK.
+  **No PDF/CSV/ALE, siglas internacionais** (P/U, SER, TAIL, AFS, NS) com legenda em português (`MARKS[].code`).
 
 ## Operação
 
