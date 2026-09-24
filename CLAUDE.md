@@ -90,6 +90,8 @@ a versão do Dexie em `openDb()` (`db.version(2).stores(...)` — nunca editar a
 
 - Câmeras do projeto em `project.kit.cameras = [{ id: 'A', body: 'Alexa Mini LF' }, …]` (dentro do jsonb `kit`,
   **sem mudança de schema**). Com 2+ câmeras o projeto é multicâmera; com 0–1, tudo funciona como antes.
+  No `ProjectForm`: contador − [n] + (padrão 1, digitável, máx. 26 = A–Z) e um campo de modelo/nome por câmera;
+  `camera_body` é preenchido a partir delas (projetos antigos: `camera_body` vira o corpo da câmera A).
 - Modelo: **uma linha de `takes` por câmera** — o take da claquete é o grupo `shot_id + take_number`
   (`takeKey`, `groupTakes`). Motivo: a sync é "último envio vence" por linha; linhas separadas = dois aparelhos
   nunca sobrescrevem a câmera um do outro. Status, notas, cartão e clipe são por câmera.

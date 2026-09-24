@@ -7,6 +7,7 @@ const I = (paths) => function Icon({ size = 22, className = '' }) {
 
 export const IconBack = I(<path d="M15 18l-6-6 6-6" />)
 export const IconPlus = I(<path d="M12 5v14M5 12h14" />)
+export const IconMinus = I(<path d="M5 12h14" />)
 export const IconMore = I(<><circle cx="12" cy="5" r="1.4" /><circle cx="12" cy="12" r="1.4" /><circle cx="12" cy="19" r="1.4" /></>)
 export const IconCheck = I(<path d="M20 6L9 17l-5-5" />)
 export const IconX = I(<path d="M18 6L6 18M6 6l12 12" />)
