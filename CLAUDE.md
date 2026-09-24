@@ -19,8 +19,9 @@ Contexto para o Claude Code continuar este projeto. Leia antes de mexer no códi
 - Supabase: `atualizacao-2026-09-24.sql` executado e Site URL configurada (24/09/2026). Keepalive testado (ok).
 - **Pendente (testes adiados pelo Antonio):** instalar/usar offline no S25+ (Chrome), iPhone e iPad; "Tornar dono"
   com 2 contas; validar CSV DIT/ALE com um DIT ou no Resolve.
-- **Próxima conversa:** retomar lacunas e roadmap — restaurar backup (JSON), relatório por cartão, campo livre,
-  importar cenas, excluir conta pelo app, trazer testes Playwright para `tests/`.
+- **Ordem combinada (25/09/2026):** fotos por take (feito) → restaurar backup (JSON) → relatório por cartão →
+  campo livre → importar cenas → testes Playwright em `tests/`. Depois: tempo real, merge por campo, excluir
+  conta pelo app, domínio próprio.
 - Ainda **não testado com Supabase real nem em aparelho real** (Samsung S25+, iPhone, iPad).
 - A v1 (single-file, localStorage) foi abandonada; não há migração de dados dela.
 
@@ -139,6 +140,19 @@ a versão do Dexie em `openDb()` (`db.version(2).stores(...)` — nunca editar a
   Recomeço · Sem claquete", som "SYNC / MOS · sem som", ★ "Circular/Circulado" na mesma linha de GOOD/NG/CHECK.
   **No PDF/CSV/ALE, siglas internacionais** (P/U, SER, TAIL, AFS, NS) com legenda em português (`MARKS[].code`).
 
+## Fotos de referência por take (`src/lib/photos.js`, `components/TakePhotos.jsx`)
+
+- Tabela `take_photos` (uma linha por foto) + Storage privado `take-photos/<projeto>/<take>/<foto>.jpg`
+  (`supabase/atualizacao-2026-09-25-fotos.sql`; policies do Storage usam `can_access_project`/`can_edit_project`
+  pelo 1º nível da pasta). Dexie **v2**: `take_photos` (sincronizada) + `photo_blobs` (só local: imagem + `pending`).
+- Foto é reduzida no aparelho (máx. 1600 px, JPEG 0,82 ≈ 30–300 KB) → ~3.000+ fotos no 1 GB grátis.
+- Sync: `uploadPhotos()` sobe as imagens pendentes **antes** do push; registros com imagem pendente não são
+  enviados ainda. Foto excluída (soft delete) → após o push, `storage.remove` + apaga a cópia local. Foto que nunca
+  subiu é apagada só localmente. Excluir take/plano/cena marca as fotos deles.
+- Visualização baixa sob demanda (`getPhotoBlob`) e guarda em `photo_blobs` para ver offline depois.
+- PDF: páginas finais "Fotos de referência" (12/página, legenda plano · take · câmera · hora · status); fotos que
+  não estão no aparelho (offline) ficam de fora com aviso. Notas do take ganham "(n fotos)"; CSV tem coluna Fotos.
+
 ## Operação
 
 - `.github/workflows/keepalive.yml`: a cada 3 dias chama `rpc/ping` (Supabase grátis pausa após 7 dias sem uso).
@@ -219,6 +233,6 @@ a demonstração "Noite Adentro", `src/lib/demo.js`). Reescrever esses passos an
 
 - Tempo real (Supabase Realtime) para 2 câmeras editando ao mesmo tempo.
 - Importar lista de cenas (CSV do roteiro/ordem do dia).
-- Relatório por cartão/rolo para o DIT; fotos de referência por take (Supabase Storage).
+- Relatório por cartão/rolo para o DIT.
 - Resolver conflitos com merge por campo (hoje: último envio vence por linha).
 - Validar CSV DIT/ALE com Silverstack/Resolve reais e ajustar colunas.

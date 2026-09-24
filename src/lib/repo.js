@@ -80,6 +80,7 @@ export async function deleteScene(id) {
     const s = await db.scenes.get(id)
     if (s) await db.scenes.put(mark({ ...s, deleted: true }))
   })
+  await deletePhotosOfTakes(await db.takes.where('scene_id').equals(id).primaryKeys())
   scheduleSync()
 }
 
@@ -97,6 +98,7 @@ export async function deleteShot(id) {
     const s = await db.shots.get(id)
     if (s) await db.shots.put(mark({ ...s, deleted: true }))
   })
+  await deletePhotosOfTakes(await db.takes.where('shot_id').equals(id).primaryKeys())
   scheduleSync()
 }
 
@@ -185,7 +187,16 @@ export async function deleteTakes(ids) {
   const db = getDb()
   const rows = (await db.takes.bulkGet(ids)).filter(Boolean)
   await softDeleteMany('takes', rows)
+  await deletePhotosOfTakes(ids)
   scheduleSync()
+}
+
+// Fotos de takes excluídos também são excluídas (liberam espaço no Storage na próxima sincronização)
+async function deletePhotosOfTakes(takeIds) {
+  if (!takeIds.length) return
+  const db = getDb()
+  const photos = (await db.take_photos.where('take_id').anyOf(takeIds).toArray()).filter((p) => !p.deleted)
+  if (photos.length) await softDeleteMany('take_photos', photos)
 }
 
 export async function deleteTake(id) {

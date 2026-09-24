@@ -3,6 +3,8 @@ import { useNavigate, useParams } from 'react-router'
 import { TopBar, Btn, Empty, Card, Sheet, TextInput, TextArea, IconBtn, useDialog } from '../components/ui'
 import { IconPlus, IconMore, IconEdit, IconTrash, IconBack, IconChevron, IconX } from '../components/icons'
 import PickerSheet from '../components/PickerSheet'
+import TakePhotos from '../components/TakePhotos'
+import { useTakePhotos } from '../lib/photos'
 import { useProject, useScene, useShot, useTakesByShots, useTakesByProject, useKit, useRole, kitOptions, useShots } from '../lib/hooks'
 import { createNextTake, addCameraToTake, deleteTakes, update, updateExtra } from '../lib/repo'
 import { projectFields, extraField, extraText, isEmpty, MARKS, SOUND, markLabel, formatTc } from '../lib/fields'
@@ -42,6 +44,8 @@ export default function Shot() {
   const takes = useTakesByShots(linked.length ? linked.map((s) => s.id) : [shotId])
   const kit = useKit()
   const allTakes = useTakesByProject(projectId) // valores já usados nos campos extras viram opções
+  const photos = useTakePhotos((takes || []).map((t) => t.id))
+  const photosOf = (id) => photos.filter((p) => p.take_id === id)
   const { user } = useAuth()
   const canEdit = useRole(project, user?.id) !== 'viewer'
   const { notify } = useDialog()
@@ -132,6 +136,7 @@ export default function Shot() {
             if (g.number !== openNum) {
               return (
                 <TakeRow key={g.number} group={g} multi={multi} onClick={() => setOpenNum(g.number)}
+                  photoCount={g.rows.reduce((n, r) => n + photosOf(r.id).length, 0)}
                   onStatus={canEdit ? (t) => { vibrate(); setField(t, 'status', nextStatus(t.status)) } : null} />
               )
             }
@@ -145,6 +150,7 @@ export default function Shot() {
                 onText={(field) => setText({ take: t, field })}
                 onStatus={(st) => setStatus(t, st)}
                 fields={fields} onExtra={(f) => openExtra(t, f)}
+                photos={photosOf(t.id)} caption={`Plano ${shotCode(scene, linked.find((x) => x.id === t.shot_id) || shot)} · Take ${g.number}${multi && t.camera ? ` · Cam ${t.camera}` : ''}`}
                 onSet={(field, value) => { vibrate(); setField(t, field, value) }}
                 onMenu={() => setEditGroup(g)} />
             )
@@ -263,7 +269,7 @@ function CameraTabs({ group, take, cams, project, canEdit, onCam, onAddCam, shot
 }
 
 function TakeCard({ group, take: t, multi, cams, project, canEdit, onCam, onAddCam, onPick, onText, onStatus, onMenu, shotName,
-  fields = [], onExtra, onSet }) {
+  fields = [], onExtra, onSet, photos = [], caption }) {
   const d = !canEdit
   // Take 1 costuma ter câmera nova (plano novo) — começa aberto; nos seguintes, só o resumo.
   // No tablet (md+) os campos ficam sempre abertos.
@@ -351,6 +357,7 @@ function TakeCard({ group, take: t, multi, cams, project, canEdit, onCam, onAddC
         </button>
         {fields.filter((f) => !f.sticky).map((f) => <ExtraChip key={f.key} f={f} />)}
       </div>
+      <TakePhotos take={t} photos={photos} canEdit={canEdit} caption={caption} />
       <button onClick={() => setOpen((o) => !o)} aria-expanded={open} data-testid="camera-toggle"
         className="mt-2 flex min-h-14 w-full items-center gap-2 rounded-xl border-2 border-line bg-surface2 px-3 py-1 text-left md:hidden">
         <div className="min-w-0 flex-1">
@@ -379,7 +386,7 @@ function TakeCard({ group, take: t, multi, cams, project, canEdit, onCam, onAddC
 
 // Take fechado. 1 câmera: resumo + botão de status (toque alterna GOOD → NG → CHECK → vazio).
 // Multicâmera: um botão de status por câmera.
-function TakeRow({ group, multi, onClick, onStatus }) {
+function TakeRow({ group, multi, onClick, onStatus, photoCount = 0 }) {
   const t = group.rows[0]
   const StatusBtn = ({ row, label }) => {
     const s = row.status && STATUS[row.status]
@@ -398,6 +405,7 @@ function TakeRow({ group, multi, onClick, onStatus }) {
     group.rows.some((r) => r.circled) && '★',
     group.rows.some((r) => r.sound === 'mos') && 'MOS',
     ...[...new Set(group.rows.flatMap((r) => r.marks || []))].map(markLabel),
+    photoCount && `📷${photoCount}`,
   ].filter(Boolean).join(' ')
   return (
     <Card className="flex items-center gap-2 p-2">

@@ -3,6 +3,7 @@ import { getDb } from './db'
 import { natCompare, fmtDate, fmtTime, joinFilters, plural } from './util'
 import { cameraOrder, projectCameras, takeKey, shotLabel } from './cameras'
 import { EXTRA_FIELDS, extraField, extraText, isEmpty, markCode, MARKS, SOUND } from './fields'
+import { photoDataUrl } from './photos'
 
 const STATUS_TXT = { good: 'GOOD', ng: 'NG', check: 'CHECK' }
 const STATUS_RGB = { good: [34, 197, 94], ng: [239, 68, 68], check: [250, 204, 21] }
@@ -44,9 +45,15 @@ export async function reportData(projectId, date = null) {
     const manyShots = new Set(list.map((t) => t.shot_id)).size > 1
     return list.map((t) => (manyShots ? `${t.camera || '?'}(${label(t.shot_id)})` : t.camera || '?')).join('+')
   }
+  const photos = (await db.take_photos.where('project_id').equals(projectId).toArray()).filter((p) => !p.deleted)
+    .sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)))
+  const photosByTake = {}
+  for (const ph of photos) (photosByTake[ph.take_id] ||= []).push(ph)
   let group = -1
   let prevKey = null
   const rows = takes.map((t) => ({
+    id: t.id,
+    photos: photosByTake[t.id] || [],
     group: key(t) === prevKey ? group : (prevKey = key(t), ++group),
     multicam: multicamText(byTake.get(key(t))),
     date: fmtDate(t.shoot_date),
@@ -102,6 +109,7 @@ export async function reportData(projectId, date = null) {
     rolls: [...new Set(rows.map((r) => r.roll).filter(Boolean))],
     circled: rows.filter((r) => r.circled).length,
     mos: rows.filter((r) => r.sound === 'MOS').length,
+    photos: rows.reduce((n, r) => n + r.photos.length, 0),
   }
   return { project, rows, summary, date, fields }
 }
@@ -157,6 +165,7 @@ export async function buildPdf(projectId, date = null) {
   const sum = `${plural(summary.takes, 'take')}${summary.records !== summary.takes ? ` (${summary.records} registros de câmera)` : ''}`
     + `  ·  ${plural(summary.scenes, 'cena')}  ·  ${plural(summary.shots, 'plano')}  ·  GOOD ${summary.good}  ·  NG ${summary.ng}  ·  CHECK ${summary.check}`
     + (summary.circled ? `  ·  Circulados ${summary.circled}` : '') + (summary.mos ? `  ·  MOS ${summary.mos}` : '')
+    + (summary.photos ? `  ·  ${plural(summary.photos, 'foto')}` : '')
     + (summary.rolls.length ? `  ·  Cartões: ${summary.rolls.join(', ')}` : '')
   doc.setFontSize(8)
   let y = 35.5
@@ -199,7 +208,8 @@ export async function buildPdf(projectId, date = null) {
     'Foco', 'ISO', 'Shutter', 'FPS', 'WB', 'Som', 'Status', 'Hora', ...(hasExtras ? ['Extras'] : []), 'Notas pós / VFX']]
   const body = rows.map((r) => [...(date ? [] : [r.date]), r.scene, r.shot, `${r.take}${r.marks ? `  ${r.marks}` : ''}`, r.camera,
     ...(multi ? [r.multicam] : []), r.roll, r.clip, r.lens, r.tstop, r.filters, r.focus, r.iso, r.shutter, r.fps, r.wb, r.sound,
-    STATUS_TXT[r.status] || '', r.time, ...(hasExtras ? [extrasOf(r)] : []), r.notes].map(pdfSafe))
+    STATUS_TXT[r.status] || '', r.time, ...(hasExtras ? [extrasOf(r)] : []),
+    [r.notes, r.photos.length && `(${plural(r.photos.length, 'foto')})`].filter(Boolean).join(' ')].map(pdfSafe))
   const col = (name) => head[0].indexOf(name)
   const statusCol = col('Status')
   const multiCol = col('Multicam')
@@ -253,6 +263,8 @@ export async function buildPdf(projectId, date = null) {
     },
   })
 
+  await addPhotoPages(doc, rows, pdfSafe)
+
   const pages = doc.getNumberOfPages()
   const stamp = new Date()
   for (let i = 1; i <= pages; i++) {
@@ -266,14 +278,63 @@ export async function buildPdf(projectId, date = null) {
   return { blob, filename: fileName(project.title, date, 'pdf') }
 }
 
+// Páginas finais com as fotos de referência (12 por página), na ordem do relatório
+async function addPhotoPages(doc, rows, safe) {
+  const items = rows.flatMap((r) => r.photos.map((p) => ({ r, p })))
+  if (!items.length) return
+  const W = doc.internal.pageSize.getWidth()
+  const M = 10
+  const COLS = 4
+  const GAP = 6
+  const cw = (W - 2 * M - GAP * (COLS - 1)) / COLS
+  const ih = cw * 0.68
+  const ch = ih + 9
+  let missing = 0
+  let i = 0
+  const newPage = () => {
+    doc.addPage()
+    doc.setFillColor(10, 10, 11)
+    doc.rect(0, 0, W, 14, 'F')
+    doc.setTextColor(245, 179, 1); doc.setFont('helvetica', 'bold'); doc.setFontSize(11)
+    doc.text(safe('FOTOS DE REFERÊNCIA'), M, 9)
+  }
+  for (const { r, p } of items) {
+    const data = await photoDataUrl(p)
+    if (!data) { missing++; continue }
+    const slot = i % 12
+    if (slot === 0) newPage()
+    const x = M + (slot % COLS) * (cw + GAP)
+    const y = 20 + Math.floor(slot / COLS) * (ch + 4)
+    // encaixa a foto mantendo a proporção
+    const ratio = p.width && p.height ? p.width / p.height : 4 / 3
+    let w = cw
+    let h = cw / ratio
+    if (h > ih) { h = ih; w = ih * ratio }
+    doc.setFillColor(240, 240, 240); doc.rect(x, y, cw, ih, 'F')
+    doc.addImage(data, 'JPEG', x + (cw - w) / 2, y + (ih - h) / 2, w, h)
+    doc.setTextColor(0, 0, 0); doc.setFont('helvetica', 'bold'); doc.setFontSize(8)
+    doc.text(safe(`${r.slate}  ·  Take ${r.take}${r.camera ? `  ·  Cam ${r.camera}` : ''}`), x, y + ih + 4)
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(7); doc.setTextColor(90, 90, 90)
+    doc.text(safe([r.date, r.time, STATUS_TXT[r.status], r.circled && 'circulado'].filter(Boolean).join('  ·  ')), x, y + ih + 7.5)
+    i++
+  }
+  if (missing) {
+    if (!i) newPage()
+    doc.setTextColor(200, 30, 30); doc.setFont('helvetica', 'normal'); doc.setFontSize(8)
+    doc.text(safe(`${plural(missing, 'foto')} não ${missing === 1 ? 'está' : 'estão'} neste aparelho (sem internet) e ${missing === 1 ? 'ficou' : 'ficaram'} de fora.`), W - M, 9, { align: 'right' })
+  }
+}
+
 export async function buildCsv(projectId, date = null) {
   const { project, rows, fields } = await reportData(projectId, date)
   const cols = [['date', 'Data'], ['scene', 'Cena'], ['shot', 'Plano'], ['shotType', 'Enquadramento'], ['take', 'Take'],
     ['camera', 'Câmera'], ['multicam', 'Multicam'], ['roll', 'Cartão'], ['clip', 'Clipe'], ['lens', 'Lente'], ['tstop', 'T-Stop'], ['filters', 'Filtros'],
     ['focus', 'Foco'], ['iso', 'ISO'], ['shutter', 'Shutter'], ['fps', 'FPS'], ['wb', 'WB'], ['sound', 'Som'], ['circled', 'Circle'],
-    ['marks', 'Marcações'], ['status', 'Status'], ['time', 'Hora'], ...fields.map((f) => [`x:${f.key}`, f.label]), ['notes', 'Notas pós/VFX']]
+    ['marks', 'Marcações'], ['status', 'Status'], ['time', 'Hora'], ...fields.map((f) => [`x:${f.key}`, f.label]), ['notes', 'Notas pós/VFX'],
+    ['photoCount', 'Fotos']]
   const esc = csvEscape(';')
   const val = (r, k) => (k === 'status' ? STATUS_TXT[r.status] || '' : k === 'circled' ? (r.circled ? 'Sim' : '')
+    : k === 'photoCount' ? r.photos.length || ''
     : k.startsWith('x:') ? extraText(extraField(k.slice(2)), r.extra[k.slice(2)]) : r[k])
   const lines = [cols.map((c) => c[1]).join(';')]
   for (const r of rows) lines.push(cols.map(([k]) => esc(val(r, k))).join(';'))
@@ -376,7 +437,7 @@ export function downloadFile({ blob, filename }) {
 export async function buildBackup() {
   const db = getDb()
   const data = {}
-  for (const t of ['projects', 'scenes', 'shots', 'takes', 'kit_items']) data[t] = (await db[t].toArray()).filter((r) => !r.deleted)
+  for (const t of ['projects', 'scenes', 'shots', 'takes', 'take_photos', 'kit_items']) data[t] = (await db[t].toArray()).filter((r) => !r.deleted)
   const blob = new Blob([JSON.stringify({ app: 'boletim-de-camera', version: 2, exported_at: new Date().toISOString(), data }, null, 1)],
     { type: 'application/json' })
   const d = new Date()

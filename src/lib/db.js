@@ -15,6 +15,11 @@ export function openDb(userId) {
     kit_items: 'id, category, _dirty',
     meta: 'key',
   })
+  // v2: fotos por take. photo_blobs é só local (a imagem em si); pending=1 = ainda não subiu para o Storage
+  db.version(2).stores({
+    take_photos: 'id, take_id, project_id, _dirty',
+    photo_blobs: 'id, pending',
+  })
   current = { userId, db }
   return db
 }
@@ -46,9 +51,10 @@ export const COLUMNS = {
     't_stop', 'filters', 'focus', 'iso', 'shutter', 'fps', 'wb', 'status', 'notes', 'recorded_at', 'created_by',
     'deleted', 'created_at', 'sound', 'circled', 'marks', 'extra'],
   kit_items: ['id', 'owner_id', 'category', 'value', 'sort_order', 'deleted', 'created_at'],
+  take_photos: ['id', 'project_id', 'take_id', 'path', 'width', 'height', 'created_by', 'deleted', 'created_at'],
 }
 
-export const TABLES = ['projects', 'kit_items', 'scenes', 'shots', 'takes'] // ordem de envio: pais antes dos filhos
+export const TABLES = ['projects', 'kit_items', 'scenes', 'shots', 'takes', 'take_photos'] // ordem de envio: pais antes dos filhos
 
 export async function getMeta(key, fallback = null) {
   const r = await getDb().meta.get(key)

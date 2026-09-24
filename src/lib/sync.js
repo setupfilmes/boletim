@@ -3,6 +3,7 @@ import { supabase } from './supabase'
 import { getDb, currentUserId, COLUMNS, TABLES, getMeta, setMeta } from './db'
 
 const PAGE = 1000
+const PHOTO_BUCKET = 'take-photos'
 const OVERLAP_MS = 60_000 // relê o último minuto para não perder nada por diferença de relógio/transação
 
 // ---------- estado observável (para o indicador na tela) ----------
@@ -65,28 +66,54 @@ export async function syncNow() {
 const pick = (row, cols) => Object.fromEntries(cols.filter((c) => c in row).map((c) => [c, row[c] ?? null]))
 
 // ---------- ENVIO ----------
+// Fotos: a imagem sobe para o Storage antes do registro (quem baixar o registro já encontra o arquivo)
+async function uploadPhotos() {
+  const db = getDb()
+  const pending = await db.photo_blobs.where('pending').equals(1).toArray()
+  for (const b of pending) {
+    const row = await db.take_photos.get(b.id)
+    if (!row || row.deleted) { await db.photo_blobs.delete(b.id); continue }
+    const { error } = await supabase.storage.from(PHOTO_BUCKET).upload(row.path, b.blob, { upsert: true, contentType: 'image/jpeg' })
+    if (!error) await db.photo_blobs.update(b.id, { pending: 0 })
+    else if (isNetwork(error)) throw error
+    else await db.take_photos.update(b.id, { _err: error.message })
+  }
+}
+
 async function push() {
   const db = getDb()
+  await uploadPhotos()
+  const waiting = new Set(await db.photo_blobs.where('pending').equals(1).primaryKeys())
   for (const table of TABLES) {
-    const dirty = await db[table].where('_dirty').equals(1).toArray()
+    let dirty = await db[table].where('_dirty').equals(1).toArray()
+    if (table === 'take_photos') dirty = dirty.filter((r) => !waiting.has(r.id))
     for (let i = 0; i < dirty.length; i += 200) {
       const chunk = dirty.slice(i, i + 200)
       const payload = chunk.map((r) => pick(r, COLUMNS[table]))
       const { error } = await supabase.from(table).upsert(payload, { onConflict: 'id' })
       if (!error) {
         await markClean(table, chunk)
+        if (table === 'take_photos') await removeDeletedPhotoFiles(chunk)
         continue
       }
       if (isNetwork(error)) throw error
       // lote recusado: tenta um a um para isolar a linha com problema
       for (const r of chunk) {
         const { error: e1 } = await supabase.from(table).upsert(pick(r, COLUMNS[table]), { onConflict: 'id' })
-        if (!e1) await markClean(table, [r])
+        if (!e1) { await markClean(table, [r]); if (table === 'take_photos') await removeDeletedPhotoFiles([r]) }
         else if (isNetwork(e1)) throw e1
         else await db[table].update(r.id, { _err: e1.message })
       }
     }
   }
+}
+
+// Foto excluída e já registrada na nuvem: apaga o arquivo do Storage e a cópia local
+async function removeDeletedPhotoFiles(rows) {
+  const gone = rows.filter((r) => r.deleted)
+  if (!gone.length) return
+  await supabase.storage.from(PHOTO_BUCKET).remove(gone.map((r) => r.path)).catch(() => {})
+  await getDb().photo_blobs.bulkDelete(gone.map((r) => r.id))
 }
 
 function isNetwork(err) {
@@ -132,13 +159,13 @@ async function pull() {
   if (!firstSync) {
     for (const p of projects) {
       if (!knownIds.has(p.id) && !p.deleted) {
-        for (const t of ['scenes', 'shots', 'takes']) await pullAll(t, (q) => q.eq('project_id', p.id))
+        for (const t of ['scenes', 'shots', 'takes', 'take_photos']) await pullAll(t, (q) => q.eq('project_id', p.id))
       }
     }
   }
 
   // 3) Incremental por tabela
-  for (const t of ['kit_items', 'scenes', 'shots', 'takes']) {
+  for (const t of ['kit_items', 'scenes', 'shots', 'takes', 'take_photos']) {
     const cursor = await getMeta(`cursor:${t}`)
     const since = cursor ? new Date(Date.parse(cursor) - OVERLAP_MS).toISOString() : null
     const maxSeen = await pullAll(t, (q) => (since ? q.gt('updated_at', since) : q))
@@ -171,6 +198,7 @@ async function applyRow(table, row) {
   if (row.deleted) {
     if (table === 'projects') await removeProjectLocal(row.id)
     else if (local) await db[table].delete(row.id)
+    if (table === 'take_photos') await db.photo_blobs.delete(row.id)
     return
   }
   await db[table].put({ ...row, _dirty: 0, _rev: local?._rev || 0, _err: null })
@@ -178,7 +206,10 @@ async function applyRow(table, row) {
 
 async function removeProjectLocal(id) {
   const db = getDb()
-  await db.transaction('rw', db.projects, db.scenes, db.shots, db.takes, async () => {
+  const photoIds = await db.take_photos.where('project_id').equals(id).primaryKeys()
+  await db.transaction('rw', [db.projects, db.scenes, db.shots, db.takes, db.take_photos, db.photo_blobs], async () => {
+    await db.photo_blobs.bulkDelete(photoIds)
+    await db.take_photos.where('project_id').equals(id).delete()
     await db.takes.where('project_id').equals(id).delete()
     await db.shots.where('project_id').equals(id).delete()
     await db.scenes.where('project_id').equals(id).delete()
