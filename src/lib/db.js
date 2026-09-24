@@ -44,7 +44,7 @@ export const COLUMNS = {
     'created_at', 'link_id', 'cameras'],
   takes: ['id', 'project_id', 'scene_id', 'shot_id', 'take_number', 'shoot_date', 'camera', 'roll', 'clip', 'lens',
     't_stop', 'filters', 'focus', 'iso', 'shutter', 'fps', 'wb', 'status', 'notes', 'recorded_at', 'created_by',
-    'deleted', 'created_at'],
+    'deleted', 'created_at', 'sound', 'circled', 'marks', 'extra'],
   kit_items: ['id', 'owner_id', 'category', 'value', 'sort_order', 'deleted', 'created_at'],
 }
 

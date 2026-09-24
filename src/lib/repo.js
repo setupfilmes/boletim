@@ -4,6 +4,7 @@ import { scheduleSync } from './sync'
 import { uuid, nowISO, todayISO, natCompare, incrCode } from './util'
 import { DEFAULT_KIT, kitItemId } from './kit'
 import { isMulticam, projectCameras, shotCameras } from './cameras'
+import { EXTRA_FIELDS } from './fields'
 
 function mark(row) {
   return { ...row, _dirty: 1, _rev: (row._rev || 0) + 1, _err: null }
@@ -100,10 +101,11 @@ export async function deleteShot(id) {
 }
 
 // ---------- Takes ----------
-export const STICKY_FIELDS = ['camera', 'roll', 'lens', 't_stop', 'filters', 'focus', 'iso', 'shutter', 'fps', 'wb']
+export const STICKY_FIELDS = ['camera', 'roll', 'lens', 't_stop', 'filters', 'focus', 'iso', 'shutter', 'fps', 'wb', 'sound']
+const STICKY_EXTRA = EXTRA_FIELDS.filter((f) => f.sticky).map((f) => f.key)
 
 // Campos que costumam ser iguais entre as câmeras do set: câmera sem histórico herda de qualquer câmera
-const SHARED_FIELDS = ['iso', 'shutter', 'fps', 'wb']
+const SHARED_FIELDS = ['iso', 'shutter', 'fps', 'wb', 'sound']
 const byRecent = (a, b) => String(b.recorded_at || b.created_at).localeCompare(String(a.recorded_at || a.created_at))
 const emptyOf = (f) => (f === 'filters' ? [] : null)
 
@@ -128,10 +130,15 @@ function takeRow(shot, inProject, number, camera, when) {
     sticky.camera = camera
     if (!source && inProject[0]) for (const f of SHARED_FIELDS) sticky[f] = inProject[0][f] ?? null
   }
+  sticky.sound ||= 'sync' // a maioria dos takes tem som; MOS é a exceção marcada
+  // campos extras "grudados" (LUT, codec, ND interno, altura…); os outros (TC, VFX) começam vazios
+  const extra = {}
+  for (const k of STICKY_EXTRA) if (source?.extra?.[k] != null) extra[k] = source.extra[k]
+  sticky.extra = Object.keys(extra).length ? extra : null
   const lastOnCard = inProject.find((t) => same(t) && (t.roll || null) === (sticky.roll || null))
   return {
     project_id: shot.project_id, scene_id: shot.scene_id, shot_id: shot.id, take_number: number,
-    shoot_date: when.date, recorded_at: when.at, status: null, notes: null,
+    shoot_date: when.date, recorded_at: when.at, status: null, notes: null, circled: false, marks: null,
     clip: lastOnCard?.clip ? incrCode(lastOnCard.clip) : null,
     created_by: currentUserId(), ...sticky,
   }
@@ -238,4 +245,14 @@ export async function ensureKitSeeded() {
 
 export function sortKit(items) {
   return [...items].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0) || natCompare(a.value, b.value))
+}
+
+// Grava um campo extra do take (takes.extra é um objeto; lê a versão atual para não perder outro campo)
+export async function updateExtra(id, key, value) {
+  const cur = await getDb().takes.get(id)
+  if (!cur) return
+  const extra = { ...(cur.extra || {}) }
+  if (value == null || value === '' || (Array.isArray(value) && !value.length)) delete extra[key]
+  else extra[key] = value
+  return update('takes', id, { extra: Object.keys(extra).length ? extra : null })
 }

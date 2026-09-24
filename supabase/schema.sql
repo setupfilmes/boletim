@@ -110,6 +110,15 @@ create table if not exists public.kit_items (
 -- ex.: 12A na câmera A e 12B na câmera B. cameras = câmeras deste plano, ex.: ["B"].
 alter table public.shots add column if not exists link_id uuid;
 alter table public.shots add column if not exists cameras jsonb;
+-- Take: som (sync|mos), circle take, marcações de claquete (['pu','ser','tail','afs','ns']) e campos extras do projeto
+alter table public.takes add column if not exists sound text;
+alter table public.takes add column if not exists circled boolean;
+alter table public.takes add column if not exists marks jsonb;
+alter table public.takes add column if not exists extra jsonb;
+-- Dono não pode ter a conta apagada enquanto tiver projetos (antes: apagava os projetos em cascata, para todos)
+alter table public.projects drop constraint if exists projects_owner_id_fkey;
+alter table public.projects add constraint projects_owner_id_fkey
+  foreign key (owner_id) references auth.users(id) on delete restrict;
 
 -- Índices (sincronização e navegação)
 create index if not exists projects_owner_idx    on public.projects(owner_id);
@@ -171,7 +180,8 @@ $$;
 create or replace function public.guard_project_update() returns trigger
 language plpgsql as $$
 begin
-  if new.owner_id is distinct from old.owner_id then
+  -- troca de dono só pela função transfer_project (que liga app.transfer durante a transação)
+  if new.owner_id is distinct from old.owner_id and coalesce(current_setting('app.transfer', true), '') <> 'on' then
     raise exception 'Não é permitido trocar o dono do projeto';
   end if;
   if new.deleted is distinct from old.deleted and old.owner_id is distinct from auth.uid() then
@@ -275,6 +285,41 @@ end $$;
 
 revoke all on function public.add_project_member(uuid, text, text) from public, anon;
 grant execute on function public.add_project_member(uuid, text, text) to authenticated;
+
+-- ---------------------------------------------------------------------
+-- Transferir o projeto para alguém da equipe (o dono antigo vira editor)
+-- ---------------------------------------------------------------------
+create or replace function public.transfer_project(p_project uuid, p_new_owner uuid)
+returns void
+language plpgsql security definer set search_path = public, auth as $$
+declare
+  v_old   uuid;
+  v_email text;
+begin
+  select owner_id into v_old from public.projects where id = p_project;
+  if v_old is null or v_old <> auth.uid() then
+    raise exception 'Somente o dono pode transferir o projeto';
+  end if;
+  if not exists (select 1 from public.project_members where project_id = p_project and user_id = p_new_owner) then
+    raise exception 'A pessoa precisa fazer parte da equipe do projeto';
+  end if;
+  select email into v_email from auth.users where id = v_old;
+  perform set_config('app.transfer', 'on', true);
+  update public.projects set owner_id = p_new_owner where id = p_project;
+  perform set_config('app.transfer', 'off', true);
+  delete from public.project_members where project_id = p_project and user_id = p_new_owner;
+  insert into public.project_members (project_id, user_id, email, role)
+  values (p_project, v_old, lower(v_email), 'editor')
+  on conflict (project_id, user_id) do update set role = 'editor';
+end $$;
+
+revoke all on function public.transfer_project(uuid, uuid) from public, anon;
+grant execute on function public.transfer_project(uuid, uuid) to authenticated;
+
+-- "Ping" usado pela GitHub Action que mantém o projeto grátis do Supabase acordado (pausa após 7 dias sem uso)
+create or replace function public.ping() returns timestamptz
+language sql stable as $$ select now() $$;
+grant execute on function public.ping() to anon, authenticated;
 
 -- Permissões de tabela para usuários logados (o RLS acima filtra as linhas)
 grant usage on schema public to authenticated;

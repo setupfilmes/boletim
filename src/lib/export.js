@@ -2,6 +2,7 @@
 import { getDb } from './db'
 import { natCompare, fmtDate, fmtTime, joinFilters, plural } from './util'
 import { cameraOrder, projectCameras, takeKey, shotLabel } from './cameras'
+import { EXTRA_FIELDS, extraField, extraText, isEmpty, markLabel, MARKS, SOUND } from './fields'
 
 const STATUS_TXT = { good: 'GOOD', ng: 'NG', check: 'CHECK' }
 const STATUS_RGB = { good: [34, 197, 94], ng: [239, 68, 68], check: [250, 204, 21] }
@@ -67,6 +68,12 @@ export async function reportData(projectId, date = null) {
     status: t.status || '',
     time: fmtTime(t.recorded_at),
     notes: t.notes || '',
+    isoDate: t.shoot_date || '',
+    slate: label(t.shot_id),
+    sound: SOUND[t.sound] || '',
+    circled: !!t.circled,
+    marks: (t.marks || []).map(markLabel).join(' '),
+    extra: t.extra || {},
   }))
   // planos que rodaram com mais de uma câmera, na ordem do relatório: "1.1 (A+B)", "12A+12B (A+B)"
   const multiShots = []
@@ -78,6 +85,10 @@ export async function reportData(projectId, date = null) {
     for (const t of list) m.cams.add(t.camera || '?')
   }
   for (const m of multiShots) m.combo = [...m.cams].sort(camCmp).join('+')
+  // campos extras que aparecem no relatório: os ligados no projeto + os que têm valor (mesmo se desligados depois)
+  const enabled = new Set(project.kit?.fields || [])
+  const used = new Set(takes.flatMap((t) => Object.keys(t.extra || {})))
+  const fields = EXTRA_FIELDS.filter((f) => enabled.has(f.key) || used.has(f.key))
   const summary = {
     takes: byTake.size,
     records: rows.length,
@@ -89,11 +100,16 @@ export async function reportData(projectId, date = null) {
     scenes: new Set(rows.map((r) => r.scene)).size,
     shots: new Set(takes.map((t) => t.shot_id)).size,
     rolls: [...new Set(rows.map((r) => r.roll).filter(Boolean))],
+    circled: rows.filter((r) => r.circled).length,
+    mos: rows.filter((r) => r.sound === 'MOS').length,
   }
-  return { project, rows, summary, date }
+  return { project, rows, summary, date, fields }
 }
 
 // Fonte padrão do PDF só tem Latin-1: troca símbolos que não existem nela
+// Colunas do PDF que podem quebrar linha; as outras ficam com a largura do conteúdo
+const FLEX_COLS = new Set(['Filtros', 'Multicam', 'Extras', 'Notas pós / VFX'])
+
 const pdfSafe = (s) => String(s ?? '').replace(/∞/g, 'INF').replace(/[’‘]/g, "'").replace(/[“”]/g, '"')
   .replace(/[–—]/g, '-').replace(/[^\x00-\xFF]/g, '')
 
@@ -101,7 +117,7 @@ export async function buildPdf(projectId, date = null) {
   // jsPDF só é carregado aqui (deixa a abertura do app mais leve). O arquivo separado
   // entra no precache do service worker, então funciona offline do mesmo jeito.
   const [{ jsPDF }, { autoTable }] = await Promise.all([import('jspdf'), import('jspdf-autotable')])
-  const { project, rows, summary } = await reportData(projectId, date)
+  const { project, rows, summary, fields } = await reportData(projectId, date)
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
   const W = doc.internal.pageSize.getWidth()
   const M = 10
@@ -140,23 +156,56 @@ export async function buildPdf(projectId, date = null) {
   const multi = summary.multicamTakes > 0
   const sum = `${plural(summary.takes, 'take')}${summary.records !== summary.takes ? ` (${summary.records} registros de câmera)` : ''}`
     + `  ·  ${plural(summary.scenes, 'cena')}  ·  ${plural(summary.shots, 'plano')}  ·  GOOD ${summary.good}  ·  NG ${summary.ng}  ·  CHECK ${summary.check}`
+    + (summary.circled ? `  ·  Circulados ${summary.circled}` : '') + (summary.mos ? `  ·  MOS ${summary.mos}` : '')
     + (summary.rolls.length ? `  ·  Cartões: ${summary.rolls.join(', ')}` : '')
-  doc.text(pdfSafe(sum), M, 35.5)
-  let startY = 39
-  if (multi) {
-    doc.setFont('helvetica', 'normal')
-    const lines = doc.splitTextToSize(pdfSafe(`Multicâmera (mesma claquete gravada por mais de uma câmera) — ${plural(summary.multicamTakes, 'take')}, `
-      + `planos: ${summary.multiShots.map((m) => `${m.label} (${m.combo})`).join(', ')}`), W - 2 * M)
-    doc.text(lines, M, 40.5)
-    startY = 40.5 + lines.length * 3.6 + 1
+  doc.setFontSize(8)
+  let y = 35.5
+  for (const line of doc.splitTextToSize(pdfSafe(sum), W - 2 * M)) { doc.text(line, M, y); y += 3.6 }
+  doc.setFont('helvetica', 'normal')
+  const info = (text) => {
+    const lines = doc.splitTextToSize(pdfSafe(text), W - 2 * M)
+    doc.text(lines, M, y + 1)
+    y += lines.length * 3.6
   }
+  if (multi) {
+    info(`Multicâmera (mesma claquete gravada por mais de uma câmera) — ${plural(summary.multicamTakes, 'take')}, `
+      + `planos: ${summary.multiShots.map((m) => `${m.label} (${m.combo})`).join(', ')}`)
+  }
+  // Campos fixos por câmera (LUT, codec, resolução, unidade) vão para o cabeçalho, não para cada linha
+  const camFields = fields.filter((f) => f.perCamera)
+  if (camFields.length) {
+    const byCam = {}
+    for (const r of rows) {
+      const o = (byCam[r.camera || '-'] ||= {})
+      for (const f of camFields) if (!isEmpty(r.extra[f.key])) (o[f.key] ||= new Set()).add(extraText(f, r.extra[f.key]))
+    }
+    const parts = Object.entries(byCam).map(([cam, o]) => {
+      const vals = camFields.filter((f) => o[f.key]).map((f) => `${f.label}: ${[...o[f.key]].join(' / ')}`)
+      return vals.length ? `${cam !== '-' ? `Câm. ${cam} — ` : ''}${vals.join(', ')}` : null
+    }).filter(Boolean)
+    if (parts.length) info(parts.join('   |   '))
+  }
+  const takeFields = fields.filter((f) => !f.perCamera)
+  const extrasOf = (r) => takeFields.filter((f) => !isEmpty(r.extra[f.key])).map((f) =>
+    (f.key === 'vfx' ? `VFX: ${extraText(f, r.extra.vfx)}` : `${f.short || f.label} ${extraText(f, r.extra[f.key])}`)).join(' · ')
+  const hasExtras = rows.some((r) => extrasOf(r))
+  const legend = [summary.circled && 'O em volta do take = circle take (escolhido)', summary.mos && 'MOS = sem som',
+    ...MARKS.filter((m) => rows.some((r) => r.marks.split(' ').includes(m.label))).map((m) => `${m.label} = ${m.title.split(' — ')[0].toLowerCase()}`)]
+    .filter(Boolean)
+  if (legend.length) { doc.setTextColor(90, 90, 90); info(`Legenda: ${legend.join('  ·  ')}`); doc.setTextColor(0, 0, 0) }
+  const startY = y + 2.5
 
   const head = [[...(date ? [] : ['Data']), 'Cena', 'Plano', 'Take', 'Cam', ...(multi ? ['Multicam'] : []), 'Cartão', 'Clipe', 'Lente', 'T-Stop', 'Filtros',
-    'Foco', 'ISO', 'Shutter', 'FPS', 'WB', 'Status', 'Hora', 'Notas pós / VFX']]
-  const body = rows.map((r) => [...(date ? [] : [r.date]), r.scene, r.shot, r.take, r.camera, ...(multi ? [r.multicam] : []), r.roll, r.clip, r.lens, r.tstop,
-    r.filters, r.focus, r.iso, r.shutter, r.fps, r.wb, STATUS_TXT[r.status] || '', r.time, r.notes].map(pdfSafe))
-  const statusCol = head[0].indexOf('Status')
-  const multiCol = head[0].indexOf('Multicam')
+    'Foco', 'ISO', 'Shutter', 'FPS', 'WB', 'Som', 'Status', 'Hora', ...(hasExtras ? ['Extras'] : []), 'Notas pós / VFX']]
+  const body = rows.map((r) => [...(date ? [] : [r.date]), r.scene, r.shot, `${r.take}${r.marks ? `  ${r.marks}` : ''}`, r.camera,
+    ...(multi ? [r.multicam] : []), r.roll, r.clip, r.lens, r.tstop, r.filters, r.focus, r.iso, r.shutter, r.fps, r.wb, r.sound,
+    STATUS_TXT[r.status] || '', r.time, ...(hasExtras ? [extrasOf(r)] : []), r.notes].map(pdfSafe))
+  const col = (name) => head[0].indexOf(name)
+  const statusCol = col('Status')
+  const multiCol = col('Multicam')
+  const soundCol = col('Som')
+  const takeCol = col('Take')
+  const extrasCol = col('Extras')
   const notesCol = head[0].length - 1
 
   autoTable(doc, {
@@ -164,10 +213,12 @@ export async function buildPdf(projectId, date = null) {
     body,
     startY,
     margin: { left: M, right: M, bottom: 12 },
+    rowPageBreak: 'avoid', // linha inteira na mesma página (e o círculo do take não se perde)
     theme: 'grid',
     styles: { font: 'helvetica', fontSize: 7.5, cellPadding: 1.4, lineColor: [190, 190, 190], lineWidth: 0.15, valign: 'middle', overflow: 'linebreak' },
     headStyles: { fillColor: [30, 30, 33], textColor: [245, 179, 1], fontStyle: 'bold', fontSize: 7 },
-    columnStyles: { [notesCol]: { cellWidth: multi ? 48 : 55 } },
+    // colunas curtas nunca quebram ("21/09/2026", "CHECK", "A001C003"); só as de texto livre se ajustam à largura
+    columnStyles: Object.fromEntries(head[0].map((h, i) => [i, FLEX_COLS.has(h) ? {} : { cellWidth: 'wrap' }])),
     didParseCell: (d) => {
       if (d.section !== 'body') return
       const r = rows[d.row.index]
@@ -184,7 +235,21 @@ export async function buildPdf(projectId, date = null) {
         d.cell.styles.fontStyle = 'bold'
         d.cell.styles.halign = 'center'
       }
+      if (d.column.index === soundCol) {
+        d.cell.styles.halign = 'center'
+        if (r.sound === 'MOS') { d.cell.styles.fillColor = [250, 204, 21]; d.cell.styles.fontStyle = 'bold' }
+        else d.cell.styles.textColor = [150, 150, 150]
+      }
       if (d.column.index <= (date ? 2 : 3) + (multi ? 1 : 0)) d.cell.styles.fontStyle = 'bold'
+    },
+    // circle take: círculo em volta do número do take, como no boletim de papel
+    didDrawCell: (d) => {
+      const r = rows[d.row.index]
+      if (d.section !== 'body' || d.column.index !== takeCol || !r?.circled) return
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5)
+      const w = doc.getTextWidth(String(r.take))
+      doc.setDrawColor(200, 30, 30); doc.setLineWidth(0.35)
+      doc.ellipse(d.cell.x + d.cell.padding('left') + w / 2, d.cell.y + d.cell.height / 2, w / 2 + 1.3, 2.3, 'S')
     },
   })
 
@@ -202,25 +267,77 @@ export async function buildPdf(projectId, date = null) {
 }
 
 export async function buildCsv(projectId, date = null) {
-  const { project, rows } = await reportData(projectId, date)
+  const { project, rows, fields } = await reportData(projectId, date)
   const cols = [['date', 'Data'], ['scene', 'Cena'], ['shot', 'Plano'], ['shotType', 'Enquadramento'], ['take', 'Take'],
     ['camera', 'Câmera'], ['multicam', 'Multicam'], ['roll', 'Cartão'], ['clip', 'Clipe'], ['lens', 'Lente'], ['tstop', 'T-Stop'], ['filters', 'Filtros'],
-    ['focus', 'Foco'], ['iso', 'ISO'], ['shutter', 'Shutter'], ['fps', 'FPS'], ['wb', 'WB'], ['status', 'Status'],
-    ['time', 'Hora'], ['notes', 'Notas pós/VFX']]
-  const esc = (v) => {
-    const s = String(v ?? '')
-    return /[;"\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
-  }
+    ['focus', 'Foco'], ['iso', 'ISO'], ['shutter', 'Shutter'], ['fps', 'FPS'], ['wb', 'WB'], ['sound', 'Som'], ['circled', 'Circle'],
+    ['marks', 'Marcações'], ['status', 'Status'], ['time', 'Hora'], ...fields.map((f) => [`x:${f.key}`, f.label]), ['notes', 'Notas pós/VFX']]
+  const esc = csvEscape(';')
+  const val = (r, k) => (k === 'status' ? STATUS_TXT[r.status] || '' : k === 'circled' ? (r.circled ? 'Sim' : '')
+    : k.startsWith('x:') ? extraText(extraField(k.slice(2)), r.extra[k.slice(2)]) : r[k])
   const lines = [cols.map((c) => c[1]).join(';')]
-  for (const r of rows) lines.push(cols.map(([k]) => esc(k === 'status' ? STATUS_TXT[r.status] || '' : r[k])).join(';'))
+  for (const r of rows) lines.push(cols.map(([k]) => esc(val(r, k))).join(';'))
   // BOM + ";" = abre certinho no Excel em português
   const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' })
   return { blob, filename: fileName(project.title, date, 'csv') }
 }
 
-function fileName(title, date, ext) {
+const csvEscape = (sep) => (v) => {
+  const s = String(v ?? '')
+  return s.includes(sep) || /["\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
+}
+
+// ---------- Para o DIT / pós ----------
+// Não há um formato público oficial de importação do Silverstack; os importadores da Pomfort (ZoeLog, Drylab…)
+// casam pela coluna "filenameBase" (nome do clipe — dá para usar só os N primeiros caracteres, ex.: 8 para A001C003)
+// ou por "timecode". Este CSV segue esse estilo, com cabeçalhos em inglês. Testar com o DIT antes de depender dele.
+const DIT_COLS = [
+  ['filenameBase', (r) => r.clip], ['camera', (r) => r.camera], ['reel', (r) => r.roll], ['scene', (r) => r.scene],
+  ['shot', (r) => r.shot], ['slate', (r) => r.slate], ['take', (r) => r.take], ['circled', (r) => (r.circled ? 'YES' : '')],
+  ['sound', (r) => r.sound], ['status', (r) => STATUS_TXT[r.status] || ''], ['marks', (r) => r.marks],
+  ['lens', (r) => r.lens], ['tStop', (r) => r.tstop], ['focus', (r) => r.focus], ['filters', (r) => r.filters],
+  ['iso', (r) => r.iso], ['shutter', (r) => r.shutter], ['fps', (r) => r.fps], ['whiteBalance', (r) => r.wb],
+  ['timecode', (r) => r.extra.tc_in || ''], ['timecodeOut', (r) => r.extra.tc_out || ''],
+  ['ndInternal', (r) => r.extra.nd_int || ''], ['lut', (r) => r.extra.lut || ''], ['codec', (r) => r.extra.codec || ''],
+  ['resolution', (r) => r.extra.resolution || ''], ['unit', (r) => r.extra.unit || ''], ['lensHeight', (r) => r.extra.lens_height || ''],
+  ['tilt', (r) => r.extra.tilt || ''], ['distance', (r) => r.extra.distance || ''], ['vfx', (r) => [].concat(r.extra.vfx || []).join(' + ')],
+  ['multicam', (r) => r.multicam], ['shootingDate', (r) => r.isoDate], ['recordedAt', (r) => r.time], ['comment', (r) => r.notes],
+]
+
+export async function buildDitCsv(projectId, date = null) {
+  const { project, rows } = await reportData(projectId, date)
+  const esc = csvEscape(',')
+  const lines = [DIT_COLS.map((c) => c[0]).join(','), ...rows.map((r) => DIT_COLS.map(([, f]) => esc(f(r))).join(','))]
+  const blob = new Blob([lines.join('\r\n')], { type: 'text/csv;charset=utf-8' })
+  return { blob, filename: fileName(project.title, date, 'csv', 'DIT') }
+}
+
+// ALE (Avid Log Exchange): formato aberto, texto separado por TAB — importa no Avid, DaVinci Resolve e Silverstack.
+// Name = nome do clipe; Start/End = TC (se preenchido); Tracks V (MOS) ou VA1A2 (com som).
+export async function buildAle(projectId, date = null) {
+  const { project, rows } = await reportData(projectId, date)
+  const fpsCount = {}
+  for (const r of rows) if (r.fps) fpsCount[r.fps] = (fpsCount[r.fps] || 0) + 1
+  const fps = Object.entries(fpsCount).sort((a, b) => b[1] - a[1])[0]?.[0] || '24'
+  const clean = (v) => String(v ?? '').replace(/[\t\r\n]+/g, ' ').trim()
+  const cols = [
+    ['Name', (r) => r.clip], ['Tracks', (r) => (r.sound === 'MOS' ? 'V' : 'VA1A2')], ['Start', (r) => r.extra.tc_in || ''],
+    ['End', (r) => r.extra.tc_out || ''], ['Tape', (r) => r.roll], ['Camroll', (r) => r.roll], ['Scene', (r) => r.slate],
+    ['Take', (r) => r.take], ['Camera', (r) => r.camera], ['Circled', (r) => (r.circled ? 'YES' : '')], ['Sound', (r) => r.sound],
+    ['Status', (r) => STATUS_TXT[r.status] || ''], ['Marks', (r) => r.marks], ['Lens', (r) => r.lens], ['T-Stop', (r) => r.tstop],
+    ['Focus', (r) => r.focus], ['Filters', (r) => r.filters], ['ISO', (r) => r.iso], ['Shutter', (r) => r.shutter],
+    ['FPS', (r) => r.fps], ['WB', (r) => r.wb], ['LUT', (r) => r.extra.lut || ''], ['Multicam', (r) => r.multicam],
+    ['Shoot Date', (r) => r.isoDate], ['Comments', (r) => r.notes],
+  ]
+  const out = ['Heading', 'FIELD_DELIM\tTABS', 'VIDEO_FORMAT\t1080', 'AUDIO_FORMAT\t48khz', `FPS\t${fps}`, '',
+    'Column', cols.map((c) => c[0]).join('\t'), '', 'Data', ...rows.map((r) => cols.map(([, f]) => clean(f(r))).join('\t'))]
+  const blob = new Blob([out.join('\r\n') + '\r\n'], { type: 'text/plain;charset=utf-8' })
+  return { blob, filename: fileName(project.title, date, 'ale') }
+}
+
+function fileName(title, date, ext, tag = '') {
   const slug = String(title || 'projeto').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/gi, '_').replace(/^_|_$/g, '')
-  return `Boletim_${slug}_${date ? date : 'completo'}.${ext}`
+  return `Boletim_${slug}_${date ? date : 'completo'}${tag ? `_${tag}` : ''}.${ext}`
 }
 
 export function canShareFiles() {

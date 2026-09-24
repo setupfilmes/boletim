@@ -30,13 +30,13 @@ const DAYS = [
             status: ['ng', 'check', 'good'], notes: { 0: 'Boom no quadro', 1: 'Foco suave no final' } },
           { code: '2', type: 'PM', cams: { A: { lens: '40mm', t: 'T2.8', focus: '1,8m' } }, status: ['ng', 'good'], notes: { 0: 'Atriz errou a fala' } },
           { code: '3', type: 'PP', desc: 'Lia atende', cams: { A: { lens: '75mm', t: 'T2', focus: '1,2m', filters: ['Pro-Mist 1/8'] } },
-            status: ['check', 'ng', 'good', 'good'], notes: { 3: 'Alternativa: fala mais baixa' } },
+            status: ['check', 'ng', 'good', 'good'], notes: { 3: 'Alternativa: fala mais baixa' }, marks: { 1: ['pu'] } },
         ] },
       { number: '4', int_ext: 'INT', period: 'DIA', location: 'Apartamento da Lia', look: 'intDia',
         shots: [
           { code: '1', type: 'PA', cams: { A: { lens: '32mm', t: 'T2.8', focus: '2,5m' } }, status: ['ng', 'good'] },
-          { code: '2', type: 'Insert', desc: 'Tela do celular', cams: { A: { lens: '100mm', t: 'T4', focus: '0,45m' } },
-            status: ['good'], notes: { 0: 'VFX · Tracking markers na tela' } },
+          { code: '2', type: 'Insert', desc: 'Tela do celular', cams: { A: { lens: '100mm', t: 'T4', focus: '0,45m' } }, mos: true,
+            status: ['good'], notes: { 0: 'Tracking markers na tela' }, vfx: { 0: ['Tracking', 'Paint out'] } },
         ] },
     ],
   },
@@ -46,7 +46,8 @@ const DAYS = [
         shots: [
           { code: '1', type: 'PG', desc: 'Travelling lateral',
             cams: { A: { lens: '24-70mm', t: 'T5.6', focus: '7m', filters: ['ND 1.2'] }, B: { lens: '70-200mm', t: 'T4', focus: '10m', filters: ['ND .9'] } },
-            status: ['ng', 'ng', 'good'], bStatus: ['ng', 'check', 'good'], notes: { 0: 'Carro entrou no quadro', 1: 'Figurante olhou para a câmera' } },
+            status: ['ng', 'ng', 'good'], bStatus: ['ng', 'check', 'good'], notes: { 0: 'Carro entrou no quadro', 1: 'Figurante olhou para a câmera' },
+            marks: { 1: ['afs'] } },
           { code: '2', type: 'PM',
             cams: { A: { lens: '32mm', t: 'T4', focus: '2m', filters: ['ND .9', 'Pro-Mist 1/8'] }, B: { lens: '65mm', t: 'T4', focus: '3m', filters: ['ND .9'] } },
             status: ['good', 'good'], bStatus: ['ng', 'good'], bNotes: { 0: 'Foco buzz no início' } },
@@ -57,7 +58,7 @@ const DAYS = [
             notes: { 0: 'Flare no final — conferir com DoP' } },
           { code: '2', type: 'Detalhe', desc: 'Mão soltando a chave',
             cams: { A: { lens: '100mm', t: 'T4', focus: '0,8m', filters: ['ND 1.2'] }, B: { lens: '50mm', t: 'T4', focus: '1,5m', filters: ['ND 1.2'] } },
-            status: ['good'], bStatus: ['good'] },
+            status: ['good'], bStatus: ['good'], mos: true },
         ] },
     ],
   },
@@ -69,7 +70,8 @@ const DAYS = [
             status: ['ng', 'good', 'good', 'check'], notes: { 0: 'Reflexo no espelho do fundo', 3: 'Som ruim — pedir wild track' } },
           { code: 'B', type: 'PP', desc: 'Téo no contraplano', link: 'bar', cams: { B: { lens: '75mm', t: 'T1.8', focus: '1,5m' } },
             status: ['ng', 'ng', 'good', 'good'], notes: { 1: 'Foco suave' } },
-          { code: 'C', type: 'Detalhe', desc: 'Copo sendo servido', cams: { A: { lens: '100mm', t: 'T2.8', focus: '0,6m' } }, status: ['good'] },
+          { code: 'C', type: 'Detalhe', desc: 'Copo sendo servido', cams: { A: { lens: '100mm', t: 'T2.8', focus: '0,6m' } }, status: ['good', 'good', 'good'],
+            mos: true, marks: { 1: ['ser'], 2: ['ser'] }, notes: { 1: 'Série: 3 variações do gesto' } },
         ] },
       { number: '13', int_ext: 'INT', period: 'NOITE', location: 'Bar Central', look: 'intNoite',
         shots: [
@@ -92,11 +94,19 @@ const DAYS = [
         shots: [
           { code: '1', type: 'Plano-sequência',
             cams: { A: { lens: '24-70mm', t: 'T4', focus: '4m', filters: ['ND .6', 'Pro-Mist 1/8'] }, B: { lens: '70-200mm', t: 'T4', focus: '10m', filters: ['ND .6'] } },
-            status: ['ng', 'check', 'good'], bStatus: ['good', 'check', 'good'], notes: { 0: 'Drone entrou no quadro', 2: 'Clean plate no final' } },
+            status: ['ng', 'check', 'good'], bStatus: ['good', 'check', 'good'], notes: { 0: 'Drone entrou no quadro', 2: 'Clean plate no final' },
+            vfx: { 2: ['Clean plate'] }, marks: { 2: ['tail'] } },
         ] },
     ],
   },
 ]
+
+// Campos extras ligados no projeto de demonstração e valores fixos de cada câmera
+const DEMO_FIELDS = ['nd_int', 'lut', 'codec', 'resolution', 'vfx']
+const CAM_TECH = {
+  A: { lut: 'K1S1', codec: 'ARRIRAW', resolution: '4.5K LF' },
+  B: { lut: 'S-Log3 to 709', codec: 'XAVC-I', resolution: '4K UHD' },
+}
 
 // Cenas sem take (para a lista parecer um roteiro real)
 const EMPTY_SCENES = [
@@ -109,7 +119,7 @@ export async function createDemoProject(userName) {
     title: 'Noite Adentro (demonstração)', production_type: 'Curta', company: 'Setup Filmes', director: 'Rafael Moura',
     dop: 'Lívia Prado', first_ac: userName || '', second_ac: 'Téo Ramos', logger: 'Bruno Sá',
     camera_body: 'A: ARRI Alexa Mini LF, B: Sony FX6',
-    kit: { cameras: [{ id: 'A', body: 'ARRI Alexa Mini LF' }, { id: 'B', body: 'Sony FX6' }] },
+    kit: { cameras: [{ id: 'A', body: 'ARRI Alexa Mini LF' }, { id: 'B', body: 'Sony FX6' }], fields: DEMO_FIELDS },
     notes: 'Projeto fictício com 4 diárias para ver o app e os relatórios preenchidos. Pode excluir quando quiser.',
   })
   const db = getDb()
@@ -161,6 +171,10 @@ export async function createDemoProject(userName) {
               clip[cam]++
               const look = LOOK[sc.look]
               const status = cam === 'B' && sh.bStatus ? sh.bStatus[k] : sh.status[k]
+              const statuses = cam === 'B' && sh.bStatus ? sh.bStatus : sh.status
+              const extra = { ...CAM_TECH[cam] }
+              if (cam === 'B' && sc.look === 'extDia') extra.nd_int = '0.9'
+              if (sh.vfx?.[k]) extra.vfx = sh.vfx[k]
               takes.push(mark({
                 id: uuid(), project_id: p.id, scene_id: scene.id, shot_id: shot.id, take_number: k + 1,
                 shoot_date: shootDate, recorded_at: at, created_by: uid, camera: cam,
@@ -168,6 +182,8 @@ export async function createDemoProject(userName) {
                 lens: c.lens, t_stop: c.t, filters: c.filters || [], focus: c.focus,
                 iso: look.iso, shutter: sh.shutter || look.shutter, fps: sh.fps || look.fps, wb: look.wb,
                 status: status || null,
+                sound: sh.mos ? 'mos' : 'sync', marks: sh.marks?.[k] || null, extra,
+                circled: status === 'good' && statuses.lastIndexOf('good') === k, // o último GOOD de cada câmera é o circulado
                 notes: (cam === 'B' && sh.bNotes ? sh.bNotes[k] : cam === 'A' || !sh.cams.A ? sh.notes?.[k] : null) || null,
               }))
             }

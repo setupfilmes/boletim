@@ -10,6 +10,7 @@ import { useAuth } from '../auth'
 import { fmtDate } from '../lib/util'
 import { takeKey } from '../lib/cameras'
 import ProjectForm from './ProjectForm'
+import InstallHint from '../components/InstallHint'
 
 export default function Projects() {
   const projects = useProjects()
@@ -39,6 +40,7 @@ export default function Projects() {
     <>
       <TopBar title="Projetos" subtitle={user?.name || user?.email} />
       <main className="mx-auto max-w-5xl px-4 pt-4 pb-28">
+        <InstallHint />
         {projects && projects.length === 0 && (
           <Empty title="Nenhum projeto ainda">
             Crie seu primeiro projeto. Tudo fica salvo no celular e sincroniza quando houver internet.

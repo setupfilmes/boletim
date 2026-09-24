@@ -56,14 +56,19 @@ export function nowISO() {
   return new Date().toISOString()
 }
 
-// Próximo código de plano: "1" -> "2", "A" -> "B", "3B" -> "3C"
+// Próximo código de plano: "1" -> "2", "A" -> "B", "3B" -> "3C". Pula I e O (padrão de claquete: confundem com 1 e 0)
+const SKIP_LETTERS = /[IO]/i
 export function nextCode(codes) {
   if (!codes.length) return '1'
   const last = [...codes].sort(natCompare).at(-1)
   const m = String(last).match(/^(.*?)(\d+)$/)
   if (m) return `${m[1]}${Number(m[2]) + 1}`
   const l = String(last).match(/^(.*?)([A-Y])$/i)
-  if (l) return `${l[1]}${String.fromCharCode(l[2].charCodeAt(0) + 1)}`
+  if (l) {
+    let c = l[2].charCodeAt(0) + 1
+    while (SKIP_LETTERS.test(String.fromCharCode(c))) c++
+    return `${l[1]}${String.fromCharCode(c)}`
+  }
   return `${last}1`
 }
 

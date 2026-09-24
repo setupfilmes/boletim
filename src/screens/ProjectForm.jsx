@@ -3,6 +3,7 @@ import { Btn, ChipSelect, Field, Sheet, TextArea, TextInput, useDialog } from '.
 import { createProject, update } from '../lib/repo'
 import { useKit } from '../lib/hooks'
 import { IconMinus, IconPlus } from '../components/icons'
+import { EXTRA_FIELDS, EXTRA_GROUPS } from '../lib/fields'
 import { useAuth } from '../auth'
 
 const MAX_CAMERAS = 26
@@ -125,6 +126,24 @@ export default function ProjectForm({ open, onClose, project, onSaved }) {
             </label>
           ))}
         </div>
+        <Field label="Campos extras do take" hint="Ligue só o que este job precisa. LUT, codec, ND interno e altura vêm preenchidos do take anterior.">
+          <div className="grid gap-2" data-testid="extra-fields">
+            {EXTRA_GROUPS.map((g) => (
+              <div key={g} className="flex flex-wrap items-center gap-2">
+                <span className="w-20 shrink-0 font-mono text-xs uppercase tracking-widest text-muted">{g}</span>
+                {EXTRA_FIELDS.filter((x) => x.group === g).map((x) => {
+                  const on = (f.kit?.fields || []).includes(x.key)
+                  return (
+                    <button type="button" key={x.key} onClick={() => toggleKit('fields', x.key)} data-testid={`field-${x.key}`}
+                      className={`min-h-10 rounded-lg border-2 px-3 font-mono text-sm ${on ? 'border-accent bg-accent text-accent-ink' : 'border-line bg-surface2'}`}>
+                      {x.label}
+                    </button>
+                  )
+                })}
+              </div>
+            ))}
+          </div>
+        </Field>
         <KitPick cat="lens" label="Lentes" />
         <KitPick cat="filter" label="Filtros" />
         <TextArea label="Observações" value={f.notes || ''} onChange={set('notes')} />

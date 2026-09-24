@@ -4,6 +4,7 @@ import { IconTrash } from '../components/icons'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../auth'
 import { scheduleSync } from '../lib/sync'
+import { getDb } from '../lib/db'
 
 const ROLES = [{ value: 'editor', label: 'Pode editar' }, { value: 'viewer', label: 'Só visualizar' }]
 
@@ -50,13 +51,26 @@ export default function Team({ project, role }) {
     load()
   }
 
+  // Passa o projeto para alguém da equipe; quem era dono continua como editor
+  const transfer = async (m) => {
+    if (!(await confirm({ title: 'Transferir projeto', confirmLabel: 'Transferir',
+      message: `Passar “${project.title}” para ${m.email}?\nEssa pessoa vira a dona do projeto (pode excluir e gerenciar a equipe). Você continua na equipe, podendo editar.` }))) return
+    const { error } = await supabase.rpc('transfer_project', { p_project: project.id, p_new_owner: m.user_id })
+    if (error) return notify(error.message.replace(/^.*?:\s*/, ''), 'error')
+    // atualiza a cópia local sem marcar para envio (o servidor já trocou o dono)
+    await getDb().projects.update(project.id, { owner_id: m.user_id })
+    scheduleSync(100)
+    notify(`Projeto transferido para ${m.email}`)
+    load()
+  }
+
   if (!sessionOk) return <p className="py-10 text-center text-sm text-muted">Entre na sua conta (com internet) para gerenciar a equipe.</p>
 
   return (
     <div className="grid gap-4">
       <p className="text-sm text-muted">
         Compartilhe este projeto com outros assistentes. Eles precisam ter uma conta no app. Quem pode editar registra takes
-        normalmente; tudo sincroniza entre os aparelhos.
+        normalmente; tudo sincroniza entre os aparelhos. O dono pode passar o projeto para outra pessoa da equipe (“Tornar dono”).
       </p>
       {err && <div className="rounded-xl border-2 border-ng p-3 text-sm text-ng">{err}</div>}
       <Card className="divide-y divide-line">
@@ -72,6 +86,7 @@ export default function Team({ project, role }) {
               <div className="truncate font-bold">{m.email}{m.user_id === user.id ? ' (você)' : ''}</div>
               <div className="text-xs uppercase tracking-widest text-muted">{m.role === 'viewer' ? 'Só visualizar' : 'Pode editar'}</div>
             </div>
+            {isOwner && <Btn size="sm" variant="ghost" onClick={() => transfer(m)} data-testid="transfer">Tornar dono</Btn>}
             {(isOwner || m.user_id === user.id) && <IconBtn label="Remover" onClick={() => remove(m)}><IconTrash /></IconBtn>}
           </div>
         ))}

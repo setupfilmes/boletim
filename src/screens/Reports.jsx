@@ -2,14 +2,14 @@ import { useMemo, useState } from 'react'
 import { Btn, Card, Empty, useDialog } from '../components/ui'
 import { IconFile, IconShare } from '../components/icons'
 import { useTakesByProject, useShotsByProject } from '../lib/hooks'
-import { buildCsv, buildPdf, downloadFile, shareFile } from '../lib/export'
+import { buildCsv, buildPdf, buildDitCsv, buildAle, downloadFile, shareFile } from '../lib/export'
 import { fmtDate, todayISO, plural } from '../lib/util'
 import { countTakes } from '../lib/cameras'
 
 export default function Reports({ project }) {
   const takes = useTakesByProject(project.id)
   const shots = useShotsByProject(project.id)
-  const { notify } = useDialog()
+  const { notify, actionSheet } = useDialog()
   const [busy, setBusy] = useState(null)
 
   const days = useMemo(() => {
@@ -51,6 +51,13 @@ export default function Reports({ project }) {
       </Btn>
       <Btn size="sm" variant="surface" onClick={() => run(`${id}-csv`, buildCsv, date, 'share')} disabled={!!busy} data-testid={`csv-${id}`}>
         CSV
+      </Btn>
+      <Btn size="sm" variant="ghost" className="col-span-3" disabled={!!busy} data-testid={`dit-${id}`}
+        onClick={() => actionSheet('Arquivos para DIT / pós', [
+          { label: 'CSV para DIT (Silverstack / Drylab)', onClick: () => run(`${id}-dit`, buildDitCsv, date, 'share') },
+          { label: 'ALE (Avid / DaVinci Resolve / Silverstack)', onClick: () => run(`${id}-ale`, buildAle, date, 'share') },
+        ])}>
+        Arquivos para DIT / pós
       </Btn>
     </div>
   )

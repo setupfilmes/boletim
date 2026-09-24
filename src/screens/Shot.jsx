@@ -3,8 +3,9 @@ import { useNavigate, useParams } from 'react-router'
 import { TopBar, Btn, Empty, Card, Sheet, TextInput, TextArea, IconBtn, useDialog } from '../components/ui'
 import { IconPlus, IconMore, IconEdit, IconTrash, IconBack, IconChevron, IconX } from '../components/icons'
 import PickerSheet from '../components/PickerSheet'
-import { useProject, useScene, useShot, useTakesByShots, useKit, useRole, kitOptions, useShots } from '../lib/hooks'
-import { createNextTake, addCameraToTake, deleteTakes, update } from '../lib/repo'
+import { useProject, useScene, useShot, useTakesByShots, useTakesByProject, useKit, useRole, kitOptions, useShots } from '../lib/hooks'
+import { createNextTake, addCameraToTake, deleteTakes, update, updateExtra } from '../lib/repo'
+import { projectFields, extraField, extraText, isEmpty, MARKS, SOUND, markLabel, formatTc } from '../lib/fields'
 import { groupTakes, isMulticam, projectCameras, cameraOrder, linkedShots, shotCameras, shotLabel } from '../lib/cameras'
 import { useAuth } from '../auth'
 import { fmtDate, fmtTime, joinFilters, vibrate, incrCode } from '../lib/util'
@@ -40,6 +41,7 @@ export default function Shot() {
   const linked = useMemo(() => (shot && !shot.deleted ? linkedShots(shot, shots) : []), [shot, shots])
   const takes = useTakesByShots(linked.length ? linked.map((s) => s.id) : [shotId])
   const kit = useKit()
+  const allTakes = useTakesByProject(projectId) // valores já usados nos campos extras viram opções
   const { user } = useAuth()
   const canEdit = useRole(project, user?.id) !== 'viewer'
   const { notify } = useDialog()
@@ -83,7 +85,17 @@ export default function Shot() {
   const setField = (take, field, value) => update('takes', take.id, { [field]: value })
   const setStatus = (take, st) => { vibrate(); setField(take, 'status', take.status === st ? null : st) }
 
-  const pf = picker && PICK_FIELDS[picker.field]
+  const fields = projectFields(project)
+  // campos extras usam a chave "x:lut", "x:tc_in"…
+  const xKey = (f) => (f?.startsWith('x:') ? f.slice(2) : null)
+  const pExtra = picker && xKey(picker.field) ? extraField(xKey(picker.field)) : null
+  const pf = picker && (pExtra ? { label: pExtra.label, cat: pExtra.key, multi: pExtra.input === 'multi', extra: pExtra } : PICK_FIELDS[picker.field])
+  const extraOptions = (f) => {
+    const used = (allTakes || []).flatMap((t) => [].concat(t.extra?.[f.key] ?? []))
+    return [...new Set([...f.presets, ...used])]
+  }
+  const pickerValue = !picker ? null : pExtra ? picker.take.extra?.[pExtra.key] ?? (pf.multi ? [] : null) : picker.take[picker.field]
+  const openExtra = (take, f) => (f.input === 'tc' ? setText({ take, field: `x:${f.key}` }) : setPicker({ take, field: `x:${f.key}` }))
   // sugestões de cartão/clipe olham só a mesma câmera
   const textTakes = (takes || []).filter((t) => !multi || !text || (t.camera || null) === (text.take.camera || null))
 
@@ -132,6 +144,8 @@ export default function Shot() {
                 onPick={(field) => setPicker({ take: t, field })}
                 onText={(field) => setText({ take: t, field })}
                 onStatus={(st) => setStatus(t, st)}
+                fields={fields} onExtra={(f) => openExtra(t, f)}
+                onSet={(field, value) => { vibrate(); setField(t, field, value) }}
                 onMenu={() => setEditGroup(g)} />
             )
           })}
@@ -146,13 +160,17 @@ export default function Shot() {
 
       <PickerSheet open={!!picker} onClose={() => setPicker(null)}
         title={pf ? `${pf.label}${multi && picker.take.camera ? ` — Cam ${picker.take.camera}` : ''}` : ''} category={pf?.cat}
-        multi={pf?.multi} value={picker ? picker.take[picker.field] : null}
-        options={pf ? kitOptions(kit, project, pf.cat) : []} project={project} canEdit={canEdit}
-        onApply={(v) => { setField(picker.take, picker.field, pf.multi ? v || [] : v); if (!pf.multi && v) notify(`${pf.label}: ${v}`) }} />
+        multi={pf?.multi} value={pickerValue} persist={!pf?.extra} numeric={pf?.extra?.numeric}
+        options={pf ? (pf.extra ? extraOptions(pf.extra) : kitOptions(kit, project, pf.cat)) : []} project={project} canEdit={canEdit}
+        onApply={(v) => {
+          if (pf.extra) updateExtra(picker.take.id, pf.extra.key, v)
+          else setField(picker.take, picker.field, pf.multi ? v || [] : v)
+          if (!pf.multi && v) notify(`${pf.label}: ${v}`)
+        }} />
 
       <TextSheet state={text} onClose={() => setText(null)} takes={textTakes}
         title={text && multi && text.take.camera ? ` — Cam ${text.take.camera}` : ''}
-        onSave={(v) => setField(text.take, text.field, v || null)} />
+        onSave={(v) => (xKey(text.field) ? updateExtra(text.take.id, xKey(text.field), v || null) : setField(text.take, text.field, v || null))} />
 
       <TakeEditSheet group={editGroup} onClose={() => setEditGroup(null)} groups={groups} />
       <ShotForm open={editShot} onClose={() => setEditShot(false)} shot={shot} scene={scene} shots={shots || []} project={project} />
@@ -244,7 +262,8 @@ function CameraTabs({ group, take, cams, project, canEdit, onCam, onAddCam, shot
   )
 }
 
-function TakeCard({ group, take: t, multi, cams, project, canEdit, onCam, onAddCam, onPick, onText, onStatus, onMenu, shotName }) {
+function TakeCard({ group, take: t, multi, cams, project, canEdit, onCam, onAddCam, onPick, onText, onStatus, onMenu, shotName,
+  fields = [], onExtra, onSet }) {
   const d = !canEdit
   // Take 1 costuma ter câmera nova (plano novo) — começa aberto; nos seguintes, só o resumo.
   // No tablet (md+) os campos ficam sempre abertos.
@@ -258,6 +277,15 @@ function TakeCard({ group, take: t, multi, cams, project, canEdit, onCam, onAddC
     if (f === 'camera') return multi ? null : `Cam ${v}`
     return v
   }).filter(Boolean)
+  for (const f of fields) if (f.sticky && !isEmpty(t.extra?.[f.key])) summary.push(`${f.short || f.label} ${extraText(f, t.extra[f.key])}`)
+  const marks = t.marks || []
+  const toggleMark = (k) => {
+    const next = marks.includes(k) ? marks.filter((x) => x !== k) : [...marks, k]
+    onSet('marks', next.length ? next : null)
+  }
+  const ExtraChip = ({ f }) => (
+    <Chip label={f.label} value={t.extra?.[f.key] ?? null} onClick={() => onExtra(f)} disabled={d} wide={f.input === 'multi'} />
+  )
   return (
     <Card className="border-accent p-3" data-testid="take-card">
       <div className="mb-3 flex items-center gap-2">
@@ -276,6 +304,28 @@ function TakeCard({ group, take: t, multi, cams, project, canEdit, onCam, onAddC
         <CameraTabs group={group} take={t} cams={cams} project={project} canEdit={canEdit} onCam={onCam} onAddCam={onAddCam} shotName={shotName} />
       )}
       <StatusButtons value={t.status} onChange={canEdit ? onStatus : null} />
+      <div className="mt-2 grid grid-cols-2 gap-2">
+        <button onClick={() => onSet('sound', t.sound === 'mos' ? 'sync' : 'mos')} disabled={d} data-testid="sound"
+          aria-label={`Som: ${SOUND[t.sound] || 'SYNC'} (tocar para trocar)`}
+          className={`flex min-h-12 items-center justify-center gap-2 rounded-xl border-2 font-mono font-medium ${
+            t.sound === 'mos' ? 'border-check bg-check text-black' : 'border-line bg-surface2 text-ink'}`}>
+          <span className="text-[11px] uppercase tracking-widest opacity-70">Som</span>{SOUND[t.sound] || 'SYNC'}
+        </button>
+        <button onClick={() => onSet('circled', !t.circled)} disabled={d} data-testid="circle" aria-pressed={!!t.circled}
+          className={`flex min-h-12 items-center justify-center gap-2 rounded-xl border-2 font-display font-bold ${
+            t.circled ? 'border-accent bg-accent text-accent-ink' : 'border-line bg-surface2 text-muted'}`}>
+          <span className="text-lg leading-none">{t.circled ? '★' : '☆'}</span> CIRCLE
+        </button>
+      </div>
+      <div className="mt-2 flex flex-wrap gap-2" data-testid="marks">
+        {MARKS.map((m) => (
+          <button key={m.key} title={m.title} disabled={d} aria-pressed={marks.includes(m.key)} onClick={() => toggleMark(m.key)}
+            className={`min-h-10 rounded-lg border-2 px-3 font-mono text-xs font-medium ${
+              marks.includes(m.key) ? 'border-accent bg-accent text-accent-ink' : 'border-line text-muted'}`}>
+            {m.label}
+          </button>
+        ))}
+      </div>
       <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-4">
         <Chip label="Cartão / Rolo" value={t.roll} onClick={() => onText('roll')} disabled={d} />
         <Chip label="Clipe" value={t.clip} onClick={() => onText('clip')} disabled={d} />
@@ -284,6 +334,7 @@ function TakeCard({ group, take: t, multi, cams, project, canEdit, onCam, onAddC
           <div className="text-[11px] uppercase tracking-widest text-muted">Notas de pós / VFX</div>
           <div className={`whitespace-pre-wrap text-sm ${t.notes ? 'text-ink' : 'text-muted/50'}`}>{t.notes || 'Tocar para anotar'}</div>
         </button>
+        {fields.filter((f) => !f.sticky).map((f) => <ExtraChip key={f.key} f={f} />)}
       </div>
       <button onClick={() => setOpen((o) => !o)} aria-expanded={open} data-testid="camera-toggle"
         className="mt-2 flex min-h-14 w-full items-center gap-2 rounded-xl border-2 border-line bg-surface2 px-3 py-1 text-left md:hidden">
@@ -305,6 +356,7 @@ function TakeCard({ group, take: t, multi, cams, project, canEdit, onCam, onAddC
         <Chip label="Shutter" value={t.shutter} onClick={() => onPick('shutter')} disabled={d} />
         <Chip label="FPS" value={t.fps} onClick={() => onPick('fps')} disabled={d} />
         <Chip label="WB" value={t.wb} onClick={() => onPick('wb')} disabled={d} />
+        {fields.filter((f) => f.sticky).map((f) => <ExtraChip key={f.key} f={f} />)}
       </div>
     </Card>
   )
@@ -327,10 +379,16 @@ function TakeRow({ group, multi, onClick, onStatus }) {
     ) : (s || label) ? <span className={`min-h-11 shrink-0 rounded-lg border-2 font-mono text-xs font-medium ${size} ${cls}`}>{body}</span> : null
   }
   const many = multi || group.rows.length > 1
+  const flags = [
+    group.rows.some((r) => r.circled) && '★',
+    group.rows.some((r) => r.sound === 'mos') && 'MOS',
+    ...[...new Set(group.rows.flatMap((r) => r.marks || []))].map(markLabel),
+  ].filter(Boolean).join(' ')
   return (
     <Card className="flex items-center gap-2 p-2">
       <button onClick={onClick} className="flex min-h-12 min-w-0 flex-1 items-center gap-3 px-2 text-left">
         <div className="w-12 shrink-0 font-display text-2xl font-extrabold">T{group.number}</div>
+        {flags && <span className="shrink-0 font-mono text-xs font-medium text-accent">{flags}</span>}
         <div className="min-w-0 flex-1 truncate font-mono text-sm text-muted">
           {many ? '' : [t.lens, t.t_stop, joinFilters(t.filters), t.fps && `${t.fps}fps`].filter(Boolean).join(' · ') || '—'}
           {group.rows.some((r) => r.notes) ? (many ? '✎' : ' · ✎') : ''}
@@ -353,8 +411,13 @@ const NOTE_TAGS = ['VFX', 'Tracking', 'Clean plate', 'Flare', 'Foco suave', 'Boo
 function TextSheet({ state, onClose, onSave, takes, title = '' }) {
   const [v, setV] = useState('')
   const field = state?.field
-  const cfg = field ? TEXT_FIELDS[field] : null
-  useEffect(() => { if (state) setV(state.take[state.field] || '') }, [state])
+  const xf = field?.startsWith('x:') ? extraField(field.slice(2)) : null
+  const cfg = xf ? { title: xf.label, placeholder: '01:00:00:00', tc: true } : field ? TEXT_FIELDS[field] : null
+  useEffect(() => {
+    if (!state) return
+    const k = state.field.startsWith('x:') ? state.field.slice(2) : null
+    setV((k ? state.take.extra?.[k] : state.take[state.field]) || '')
+  }, [state])
   if (!state) return null
 
   // sugestões rápidas para não precisar digitar
@@ -370,7 +433,12 @@ function TextSheet({ state, onClose, onSave, takes, title = '' }) {
     else if (state.take.roll) quick.push(`${state.take.roll}C001`)
   }
 
-  const save = (val = v) => { onSave(val.trim()); onClose() }
+  // TC in: sugere o TC out do take anterior (mesma câmera)
+  if (xf?.key === 'tc_in') {
+    const prev = takes.filter((t) => t.take_number < state.take.take_number && t.extra?.tc_out).sort((a, b) => b.take_number - a.take_number)[0]
+    if (prev) quick.push(prev.extra.tc_out)
+  }
+  const save = (val = v) => { onSave(cfg.tc ? formatTc(val) : val.trim()); onClose() }
 
   return (
     <Sheet open onClose={onClose} title={`${cfg.title}${title}`}
@@ -390,7 +458,11 @@ function TextSheet({ state, onClose, onSave, takes, title = '' }) {
           ))}
         </div>
       )}
-      {cfg.multiline
+      {cfg.tc
+        ? <TextInput value={v} onChange={(e) => setV(e.target.value.replace(/[^\d:]/g, ''))} placeholder={cfg.placeholder}
+            inputMode="numeric" onKeyDown={(e) => e.key === 'Enter' && save()} label="Timecode" autoFocus
+            hint={`Digite só os números: 1020304 → ${formatTc('1020304')}`} />
+        : cfg.multiline
         ? <TextArea rows={4} value={v} onChange={(e) => setV(e.target.value)} placeholder={cfg.placeholder} autoFocus />
         : <TextInput value={v} onChange={(e) => setV(e.target.value.toUpperCase())} placeholder={cfg.placeholder}
             onKeyDown={(e) => e.key === 'Enter' && save()} autoCapitalize="characters" />}

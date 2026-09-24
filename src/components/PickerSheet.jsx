@@ -8,7 +8,9 @@ const NUMERIC = new Set(['iso', 'fps', 'tstop', 'focus'])
 
 // Gaveta inferior com botões grandes para escolher um valor sem teclado.
 // "Adicionar novo" aplica o valor e já salva no kit para as próximas vezes.
-export default function PickerSheet({ open, onClose, title, category, value, multi, options, onApply, project, canEdit = true }) {
+// persist=false: campos extras do projeto (não existem no kit; os valores já usados viram as opções).
+export default function PickerSheet({ open, onClose, title, category, value, multi, options, onApply, project, canEdit = true,
+  persist = true, numeric }) {
   const [sel, setSel] = useState([])
   const [draft, setDraft] = useState('')
 
@@ -28,8 +30,8 @@ export default function PickerSheet({ open, onClose, title, category, value, mul
   const addNew = async () => {
     const v = draft.trim()
     if (!v) return
-    await addKitItem(category, v)
-    if (project && canEdit && (category === 'lens' || category === 'filter')) {
+    if (persist) await addKitItem(category, v)
+    if (persist && project && canEdit && (category === 'lens' || category === 'filter')) {
       const list = project.kit?.[category]
       if (Array.isArray(list) && list.length && !list.includes(v)) {
         await update('projects', project.id, { kit: { ...project.kit, [category]: [...list, v] } })
@@ -70,7 +72,7 @@ export default function PickerSheet({ open, onClose, title, category, value, mul
       </div>
       <div className="mt-4 flex gap-2">
         <input value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="Adicionar novo…"
-          inputMode={NUMERIC.has(category) ? 'decimal' : 'text'}
+          inputMode={numeric ?? NUMERIC.has(category) ? 'decimal' : 'text'}
           onKeyDown={(e) => e.key === 'Enter' && addNew()}
           className="min-h-14 min-w-0 flex-1 rounded-xl border-2 border-line bg-bg px-3 text-ink outline-none focus:border-accent" />
         <Btn onClick={addNew} disabled={!draft.trim()} aria-label="Adicionar"><IconPlus /></Btn>

@@ -113,6 +113,34 @@ a versão do Dexie em `openDb()` (`db.version(2).stores(...)` — nunca editar a
 - `link_id`/`cameras` só entram no envio quando a chave existe na linha (`pick` em `sync.js`), então planos
   antigos/sem vínculo sincronizam mesmo em banco sem essas colunas.
 
+## Padrão da indústria no take (`src/lib/fields.js`)
+
+- `takes.sound` ('sync'|'mos', grudado; padrão 'sync'), `takes.circled` (circle take = escolhido; ≠ GOOD),
+  `takes.marks` (['pu','ser','tail','afs','ns'] = P/U, SER, TAIL, AFS, S/ CLAQ), `takes.extra` (objeto com os
+  campos extras). Colunas criadas por `supabase/atualizacao-2026-09-24.sql` (também no `schema.sql`).
+- Campos extras ligados por projeto em `project.kit.fields` (catálogo `EXTRA_FIELDS`: TC in/out, ND interno, LUT,
+  codec, resolução, unidade, altura da lente, tilt, distância, VFX). `sticky` = vem do take anterior da mesma
+  câmera; `perCamera` = no PDF vai para o cabeçalho por câmera (LUT/codec/resolução/unidade); o resto vai na
+  coluna "Extras". Gravar sempre com `updateExtra()` (mescla com o objeto atual). Valores já usados no projeto
+  viram opções da gaveta (`PickerSheet persist={false}` — não salva no kit, cuja categoria tem CHECK no banco).
+- PDF: circle take = círculo vermelho em volta do nº do take (`didDrawCell`); marcações ao lado do nº; coluna Som
+  (MOS em amarelo); legenda das siglas; colunas curtas com `cellWidth: 'wrap'` (só `FLEX_COLS` quebram linha);
+  `rowPageBreak: 'avoid'`.
+- Para DIT/pós (aba Diárias → "Arquivos para DIT / pós"): `buildDitCsv` (colunas em inglês, casa por
+  `filenameBase` = clipe; no Silverstack usar "primeiros N caracteres" = 8 para A001C003) e `buildAle`
+  (Avid Log Exchange, TAB; Name = clipe, Start/End = TC, Tracks V/VA1A2). **Não há formato público oficial do
+  Silverstack — validar com um DIT real antes de prometer.**
+- Letras de plano pulam I e O (`nextCode`).
+
+## Operação
+
+- `.github/workflows/keepalive.yml`: a cada 3 dias chama `rpc/ping` (Supabase grátis pausa após 7 dias sem uso).
+  O GitHub desativa workflows agendados em repositório sem commits por 60 dias — reativar em Actions se parar.
+- Dono do projeto: `transfer_project(project, new_owner)` (RPC; aba Equipe → "Tornar dono"; o antigo vira
+  editor). `projects.owner_id` agora é `on delete restrict`: apagar no painel uma conta dona de projetos falha.
+- Android: instalar pelo **Chrome**. O Samsung Internet gera um pacote que o Play Protect bloqueia
+  ("App de risco bloqueado"); `InstallHint` avisa e oferece "Abrir no Chrome" (intent).
+
 ## Mapa de arquivos
 
 - `src/App.jsx` rotas (HashRouter): `/`, `/p/:projectId?tab=cenas|diarias|equipe|info`, `/p/:pid/s/:sceneId`,
@@ -183,7 +211,7 @@ a demonstração "Noite Adentro", `src/lib/demo.js`). Reescrever esses passos an
 ## Ideias para próximas versões (não implementadas)
 
 - Tempo real (Supabase Realtime) para 2 câmeras editando ao mesmo tempo.
-- Campos por projeto configuráveis (ex.: timecode, LUT, altura/tilt, distância hiperfocal).
 - Importar lista de cenas (CSV do roteiro/ordem do dia).
 - Relatório por cartão/rolo para o DIT; fotos de referência por take (Supabase Storage).
 - Resolver conflitos com merge por campo (hoje: último envio vence por linha).
+- Validar CSV DIT/ALE com Silverstack/Resolve reais e ajustar colunas.
