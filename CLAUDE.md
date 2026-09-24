@@ -100,8 +100,16 @@ a versão do Dexie em `openDb()` (`db.version(2).stores(...)` — nunca editar a
 - Contagens nas listas (`countTakes`) contam takes da claquete, não linhas.
 - PDF **combinado** (decisão do Antonio): coluna "Multicam" (A+B), sombreado por take, linha com os planos que
   rodaram em multicâmera e corpo de cada câmera no cabeçalho. CSV também tem a coluna "Multicam".
-- Fora do escopo por enquanto: A e B em planos diferentes com a mesma claquete (ex.: A no 12A, B no 12B) —
-  hoje cada câmera registra no seu plano, sem vínculo entre eles.
+- **Planos vinculados** (A no 12A, B no 12B, mesma claquete): `shots.link_id` (planos com o mesmo uuid rodam
+  juntos, mesma cena) + `shots.cameras` (jsonb, câmeras do plano). Editados no `ShotForm` ("Câmeras deste plano" e
+  "Roda junto com"). A tela do plano carrega os takes de todos os vinculados (`useTakesByShots`); abas mostram
+  câmera + plano; `+ TAKE` cria o mesmo número em todos, cada plano com suas câmeras. `takeKey(t, shotsById)`
+  trata planos vinculados como uma claquete (contagens e relatório). No PDF/CSV os planos vinculados ficam juntos
+  (ordenados pelo 1º plano do grupo) e a coluna Multicam mostra `A(12A)+B(12B)`.
+  Desvincular = "não rodaram juntos": o histórico deixa de aparecer como multicâmera (para "a B parou de rodar",
+  usar "Câmera B não rodou" no take).
+- `link_id`/`cameras` só entram no envio quando a chave existe na linha (`pick` em `sync.js`), então planos
+  antigos/sem vínculo sincronizam mesmo em banco sem essas colunas.
 
 ## Mapa de arquivos
 

@@ -39,8 +39,9 @@ export const COLUMNS = {
     'logger', 'camera_body', 'kit', 'notes', 'deleted', 'created_at'],
   scenes: ['id', 'project_id', 'number', 'int_ext', 'period', 'location', 'description', 'sort_order', 'created_by',
     'deleted', 'created_at'],
+  // link_id/cameras só vão no envio quando existem na linha (planos antigos/sem vínculo não mandam essas colunas)
   shots: ['id', 'project_id', 'scene_id', 'code', 'shot_type', 'description', 'sort_order', 'created_by', 'deleted',
-    'created_at'],
+    'created_at', 'link_id', 'cameras'],
   takes: ['id', 'project_id', 'scene_id', 'shot_id', 'take_number', 'shoot_date', 'camera', 'roll', 'clip', 'lens',
     't_stop', 'filters', 'focus', 'iso', 'shutter', 'fps', 'wb', 'status', 'notes', 'recorded_at', 'created_by',
     'deleted', 'created_at'],

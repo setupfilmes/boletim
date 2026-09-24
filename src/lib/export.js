@@ -1,7 +1,7 @@
 // Relatórios gerados 100% no aparelho (funciona sem internet)
 import { getDb } from './db'
 import { natCompare, fmtDate, fmtTime, joinFilters, plural } from './util'
-import { cameraOrder, projectCameras, takeKey } from './cameras'
+import { cameraOrder, projectCameras, takeKey, shotLabel } from './cameras'
 
 const STATUS_TXT = { good: 'GOOD', ng: 'NG', check: 'CHECK' }
 const STATUS_RGB = { good: [34, 197, 94], ng: [239, 68, 68], check: [250, 204, 21] }
@@ -15,24 +15,39 @@ export async function reportData(projectId, date = null) {
     .filter((t) => !t.deleted && scenes[t.scene_id] && !scenes[t.scene_id].deleted && shots[t.shot_id] && !shots[t.shot_id].deleted)
   if (date) takes = takes.filter((t) => t.shoot_date === date)
   const camCmp = cameraOrder(project)
+  const key = (t) => takeKey(t, shots) // planos vinculados (link_id) = mesma claquete
+  const label = (shotId) => shotLabel(scenes[shots[shotId].scene_id], shots[shotId])
+  // Planos vinculados ficam juntos no relatório, na posição do primeiro plano do grupo (ex.: 12A e 12B sob 12A)
+  const leadCode = {}
+  for (const sh of Object.values(shots)) {
+    if (sh.deleted) continue
+    const k = sh.link_id || sh.id
+    if (leadCode[k] == null || natCompare(sh.code, leadCode[k]) < 0) leadCode[k] = sh.code
+  }
+  const lead = (t) => leadCode[shots[t.shot_id].link_id || t.shot_id] ?? shots[t.shot_id].code
   takes.sort((a, b) =>
     (date ? 0 : String(a.shoot_date).localeCompare(String(b.shoot_date)))
     || natCompare(scenes[a.scene_id].number, scenes[b.scene_id].number)
-    || natCompare(shots[a.shot_id].code, shots[b.shot_id].code)
+    || natCompare(lead(a), lead(b))
     || a.take_number - b.take_number
+    || natCompare(shots[a.shot_id].code, shots[b.shot_id].code)
     || camCmp(a.camera, b.camera))
-  // Multicâmera: câmeras que gravaram o mesmo take (mesmo plano + número da claquete)
-  const camsByTake = new Map()
+  // Multicâmera: câmeras que gravaram o mesmo take (mesma claquete, no mesmo plano ou em planos vinculados)
+  const byTake = new Map()
   for (const t of takes) {
-    const k = takeKey(t)
-    if (!camsByTake.has(k)) camsByTake.set(k, [])
-    camsByTake.get(k).push(t.camera || '?')
+    if (!byTake.has(key(t))) byTake.set(key(t), [])
+    byTake.get(key(t)).push(t)
+  }
+  const multicamText = (list) => {
+    if (list.length < 2) return ''
+    const manyShots = new Set(list.map((t) => t.shot_id)).size > 1
+    return list.map((t) => (manyShots ? `${t.camera || '?'}(${label(t.shot_id)})` : t.camera || '?')).join('+')
   }
   let group = -1
   let prevKey = null
   const rows = takes.map((t) => ({
-    group: takeKey(t) === prevKey ? group : (prevKey = takeKey(t), ++group),
-    multicam: camsByTake.get(takeKey(t)).length > 1 ? camsByTake.get(takeKey(t)).join('+') : '',
+    group: key(t) === prevKey ? group : (prevKey = key(t), ++group),
+    multicam: multicamText(byTake.get(key(t))),
     date: fmtDate(t.shoot_date),
     scene: scenes[t.scene_id].number,
     shot: shots[t.shot_id].code,
@@ -53,21 +68,20 @@ export async function reportData(projectId, date = null) {
     time: fmtTime(t.recorded_at),
     notes: t.notes || '',
   }))
-  // planos que rodaram com mais de uma câmera, na ordem do relatório: "12/1 (A+B)"
+  // planos que rodaram com mais de uma câmera, na ordem do relatório: "1.1 (A+B)", "12A+12B (A+B)"
   const multiShots = []
-  for (const t of takes) {
-    const cams = camsByTake.get(takeKey(t))
-    if (cams.length < 2) continue
-    const label = `${scenes[t.scene_id].number}/${shots[t.shot_id].code}`
-    let m = multiShots.find((x) => x.label === label)
-    if (!m) multiShots.push((m = { label, cams: new Set() }))
-    for (const c of cams) m.cams.add(c)
+  for (const list of byTake.values()) {
+    if (list.length < 2) continue
+    const name = [...new Set(list.map((t) => label(t.shot_id)))].join('+')
+    let m = multiShots.find((x) => x.label === name)
+    if (!m) multiShots.push((m = { label: name, cams: new Set() }))
+    for (const t of list) m.cams.add(t.camera || '?')
   }
   for (const m of multiShots) m.combo = [...m.cams].sort(camCmp).join('+')
   const summary = {
-    takes: camsByTake.size,
+    takes: byTake.size,
     records: rows.length,
-    multicamTakes: [...camsByTake.values()].filter((c) => c.length > 1).length,
+    multicamTakes: [...byTake.values()].filter((c) => c.length > 1).length,
     multiShots,
     good: rows.filter((r) => r.status === 'good').length,
     ng: rows.filter((r) => r.status === 'ng').length,
@@ -107,7 +121,7 @@ export async function buildPdf(projectId, date = null) {
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(9)
   const cams = projectCameras(project)
-  const bodies = cams.length >= 2 ? cams.map((c) => `${c.id}: ${c.body || '-'}`).join('  ') : project.camera_body
+  const bodies = cams.length >= 2 ? cams.filter((c) => c.body).map((c) => `${c.id}: ${c.body}`).join('  ') : project.camera_body
   doc.text(pdfSafe([project.production_type, project.company, bodies].filter(Boolean).join('  ·  ')), W - M, 17, { align: 'right' })
 
   // Equipe e resumo

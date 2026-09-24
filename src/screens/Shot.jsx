@@ -3,9 +3,9 @@ import { useNavigate, useParams } from 'react-router'
 import { TopBar, Btn, Empty, Card, Sheet, TextInput, TextArea, IconBtn, useDialog } from '../components/ui'
 import { IconPlus, IconMore, IconEdit, IconTrash, IconBack, IconChevron, IconX } from '../components/icons'
 import PickerSheet from '../components/PickerSheet'
-import { useProject, useScene, useShot, useTakesByShot, useKit, useRole, kitOptions, useShots } from '../lib/hooks'
+import { useProject, useScene, useShot, useTakesByShots, useKit, useRole, kitOptions, useShots } from '../lib/hooks'
 import { createNextTake, addCameraToTake, deleteTakes, update } from '../lib/repo'
-import { groupTakes, isMulticam, projectCameras, cameraOrder } from '../lib/cameras'
+import { groupTakes, isMulticam, projectCameras, cameraOrder, linkedShots, shotCameras, shotLabel } from '../lib/cameras'
 import { useAuth } from '../auth'
 import { fmtDate, fmtTime, joinFilters, vibrate, incrCode } from '../lib/util'
 import { STATUS, ShotForm } from './Scene'
@@ -26,7 +26,7 @@ const PICK_FIELDS = {
 // Campos de câmera que quase não mudam entre takes — ficam no resumo recolhível
 const CAMERA_FIELDS = ['camera', 'lens', 't_stop', 'filters', 'focus', 'iso', 'shutter', 'fps', 'wb']
 
-const shotCode = (scene, shot) => `${scene?.number ?? ''}${/^\d/.test(shot.code) ? '.' : ''}${shot.code}`
+const shotCode = shotLabel
 
 const nextStatus = (s) => (s === 'good' ? 'ng' : s === 'ng' ? 'check' : s === 'check' ? null : 'good')
 
@@ -36,7 +36,9 @@ export default function Shot() {
   const scene = useScene(sceneId)
   const shot = useShot(shotId)
   const shots = useShots(sceneId)
-  const takes = useTakesByShot(shotId)
+  // planos vinculados (rodam juntos, mesma claquete): a tela mostra os takes de todos eles
+  const linked = useMemo(() => (shot && !shot.deleted ? linkedShots(shot, shots) : []), [shot, shots])
+  const takes = useTakesByShots(linked.length ? linked.map((s) => s.id) : [shotId])
   const kit = useKit()
   const { user } = useAuth()
   const canEdit = useRole(project, user?.id) !== 'viewer'
@@ -54,7 +56,8 @@ export default function Shot() {
   const groups = useMemo(() => groupTakes(takes, project), [takes, project])
   const multi = isMulticam(project)
   const cams = projectCameras(project).map((c) => c.id)
-  const camSel = cam ?? cams[0] ?? null
+  const camSel = cam ?? shotCameras(shot)?.[0] ?? cams[0] ?? null
+  useEffect(() => { setCam(null) }, [shotId])
 
   const latestNum = groups[0]?.number
   useEffect(() => { setOpenNum(latestNum ?? null) }, [latestNum])
@@ -71,7 +74,7 @@ export default function Shot() {
 
   const addTake = async () => {
     vibrate(25)
-    const rows = await createNextTake(shot, project)
+    const rows = await createNextTake(shot, project, linked)
     setOpenNum(rows[0].take_number)
     if (multi && !rows.some((r) => r.camera === camSel)) setCam(rows[0].camera)
     window.scrollTo({ top: 0, behavior: 'smooth' })
@@ -95,6 +98,17 @@ export default function Shot() {
             onGo={goShot} onNew={canEdit ? () => setNewShot(true) : null} />
         )}
         {shot.description && <div className="mb-3 px-1 text-sm text-muted">{shot.description}</div>}
+        {linked.length > 1 && (
+          <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border-2 border-accent/60 px-3 py-2" data-testid="linked-banner">
+            <span className="font-display text-sm font-bold text-accent">Roda junto com</span>
+            {linked.filter((s) => s.id !== shot.id).map((s) => (
+              <button key={s.id} onClick={() => goShot(s)} className="min-h-10 rounded-lg border-2 border-line bg-surface2 px-3 font-display text-sm font-bold">
+                {shotCode(scene, s)}{shotCameras(s) ? ` · câm. ${shotCameras(s).join('+')}` : ''}
+              </button>
+            ))}
+            <span className="w-full font-mono text-xs text-muted">Mesma claquete: + TAKE cria o take em todos os planos vinculados.</span>
+          </div>
+        )}
         {takes?.length === 0 && (
           <Empty title="Nenhum take">
             Toque em <b>+ TAKE 1</b>.{multi ? ` O take é criado para as câmeras ${cams.join(', ')} — cada uma com seus valores e status.` : ''} Os
@@ -112,8 +126,9 @@ export default function Shot() {
             const t = g.rows.find((r) => r.camera === camSel) || g.rows[0]
             return (
               <TakeCard key={g.number} group={g} take={t} multi={multi} cams={cams} project={project} canEdit={canEdit}
+                shotName={linked.length > 1 ? (id) => shotCode(scene, linked.find((s) => s.id === id) || shot) : null}
                 onCam={(c) => { vibrate(); setCam(c) }}
-                onAddCam={async (c) => { vibrate(); await addCameraToTake(shot, g, c); setCam(c); notify(`Câmera ${c} incluída no take ${g.number}`) }}
+                onAddCam={async (c) => { vibrate(); await addCameraToTake(linked.find((s) => shotCameras(s)?.includes(c)) || shot, g, c); setCam(c); notify(`Câmera ${c} incluída no take ${g.number}`) }}
                 onPick={(field) => setPicker({ take: t, field })}
                 onText={(field) => setText({ take: t, field })}
                 onStatus={(st) => setStatus(t, st)}
@@ -140,8 +155,8 @@ export default function Shot() {
         onSave={(v) => setField(text.take, text.field, v || null)} />
 
       <TakeEditSheet group={editGroup} onClose={() => setEditGroup(null)} groups={groups} />
-      <ShotForm open={editShot} onClose={() => setEditShot(false)} shot={shot} scene={scene} shots={shots || []} />
-      <ShotForm open={newShot} onClose={() => setNewShot(false)} shot={null} scene={scene} shots={shots || []} onCreated={goShot} />
+      <ShotForm open={editShot} onClose={() => setEditShot(false)} shot={shot} scene={scene} shots={shots || []} project={project} />
+      <ShotForm open={newShot} onClose={() => setNewShot(false)} shot={null} scene={scene} shots={shots || []} project={project} onCreated={goShot} />
     </>
   )
 }
@@ -198,7 +213,7 @@ function Chip({ label, value, onClick, wide, disabled }) {
 }
 
 // Abas das câmeras do take: câmera que rodou mostra o status; câmera do projeto que não está no take vira "+ B"
-function CameraTabs({ group, take, cams, project, canEdit, onCam, onAddCam }) {
+function CameraTabs({ group, take, cams, project, canEdit, onCam, onAddCam, shotName }) {
   const ids = [...new Set([...cams, ...group.rows.map((r) => r.camera)])].sort(cameraOrder(project))
   return (
     <div className="mb-3 flex gap-2" data-testid="camera-tabs">
@@ -218,7 +233,9 @@ function CameraTabs({ group, take, cams, project, canEdit, onCam, onAddCam }) {
           <button key={c ?? '-'} onClick={() => onCam(c)} aria-pressed={on} data-testid={`cam-${c}`}
             className={`flex min-h-14 min-w-14 flex-1 flex-col items-center justify-center rounded-xl border-2 ${
               on ? 'border-accent bg-surface2' : 'border-line bg-bg'}`}>
-            <span className={`font-display text-xl font-extrabold leading-none ${on ? 'text-accent' : 'text-ink'}`}>{c || '—'}</span>
+            <span className={`font-display text-xl font-extrabold leading-none ${on ? 'text-accent' : 'text-ink'}`}>
+              {c || '—'}{shotName && <span className="ml-1 font-mono text-xs font-medium">{shotName(row.shot_id)}</span>}
+            </span>
             <span className={`mt-1 rounded px-1 font-mono text-[10px] font-medium leading-tight ${st ? st.cls : 'text-muted'}`}>{st ? st.label : '—'}</span>
           </button>
         )
@@ -227,7 +244,7 @@ function CameraTabs({ group, take, cams, project, canEdit, onCam, onAddCam }) {
   )
 }
 
-function TakeCard({ group, take: t, multi, cams, project, canEdit, onCam, onAddCam, onPick, onText, onStatus, onMenu }) {
+function TakeCard({ group, take: t, multi, cams, project, canEdit, onCam, onAddCam, onPick, onText, onStatus, onMenu, shotName }) {
   const d = !canEdit
   // Take 1 costuma ter câmera nova (plano novo) — começa aberto; nos seguintes, só o resumo.
   // No tablet (md+) os campos ficam sempre abertos.
@@ -247,12 +264,16 @@ function TakeCard({ group, take: t, multi, cams, project, canEdit, onCam, onAddC
         <div className="font-display text-3xl font-extrabold">TAKE {t.take_number}</div>
         <div className="min-w-0 flex-1 font-mono text-xs text-muted">
           {fmtTime(t.recorded_at)} · {fmtDate(t.shoot_date)}
-          {group.rows.length > 1 && <span className="ml-1 rounded border border-accent px-1 text-accent">{group.rows.map((r) => r.camera).join('+')}</span>}
+          {group.rows.length > 1 && (
+            <span className="ml-1 rounded border border-accent px-1 text-accent">
+              {group.rows.map((r) => r.camera).join('+')}
+            </span>
+          )}
         </div>
         {canEdit && <IconBtn label="Opções do take" onClick={onMenu}><IconMore /></IconBtn>}
       </div>
       {(multi || group.rows.length > 1) && (
-        <CameraTabs group={group} take={t} cams={cams} project={project} canEdit={canEdit} onCam={onCam} onAddCam={onAddCam} />
+        <CameraTabs group={group} take={t} cams={cams} project={project} canEdit={canEdit} onCam={onCam} onAddCam={onAddCam} shotName={shotName} />
       )}
       <StatusButtons value={t.status} onChange={canEdit ? onStatus : null} />
       <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-4">

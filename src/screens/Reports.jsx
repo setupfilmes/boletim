@@ -1,13 +1,14 @@
 import { useMemo, useState } from 'react'
 import { Btn, Card, Empty, useDialog } from '../components/ui'
 import { IconFile, IconShare } from '../components/icons'
-import { useTakesByProject } from '../lib/hooks'
+import { useTakesByProject, useShotsByProject } from '../lib/hooks'
 import { buildCsv, buildPdf, downloadFile, shareFile } from '../lib/export'
 import { fmtDate, todayISO, plural } from '../lib/util'
 import { countTakes } from '../lib/cameras'
 
 export default function Reports({ project }) {
   const takes = useTakesByProject(project.id)
+  const shots = useShotsByProject(project.id)
   const { notify } = useDialog()
   const [busy, setBusy] = useState(null)
 
@@ -18,8 +19,9 @@ export default function Reports({ project }) {
       o.rows.push(t)
       o.scenes.add(t.scene_id)
     }
-    return Object.values(m).map((d) => ({ ...d, ...countTakes(d.rows) })).sort((a, b) => b.date.localeCompare(a.date))
-  }, [takes])
+    const shotsById = Object.fromEntries((shots || []).map((s) => [s.id, s]))
+    return Object.values(m).map((d) => ({ ...d, ...countTakes(d.rows, shotsById) })).sort((a, b) => b.date.localeCompare(a.date))
+  }, [takes, shots])
 
   const run = async (key, fn, date, mode) => {
     setBusy(key)

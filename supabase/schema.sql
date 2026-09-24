@@ -105,6 +105,12 @@ create table if not exists public.kit_items (
   updated_at  timestamptz not null default now()
 );
 
+-- Colunas adicionadas depois (migrações idempotentes)
+-- Multicâmera em planos diferentes: planos com o mesmo link_id rodam juntos (mesma claquete),
+-- ex.: 12A na câmera A e 12B na câmera B. cameras = câmeras deste plano, ex.: ["B"].
+alter table public.shots add column if not exists link_id uuid;
+alter table public.shots add column if not exists cameras jsonb;
+
 -- Índices (sincronização e navegação)
 create index if not exists projects_owner_idx    on public.projects(owner_id);
 create index if not exists projects_updated_idx  on public.projects(updated_at);

@@ -26,6 +26,11 @@ export const useTakesByShot = (shotId) =>
   useLiveQuery(async () => alive(await getDb().takes.where('shot_id').equals(shotId).toArray())
     .sort((a, b) => b.take_number - a.take_number), [shotId])
 
+// Takes de vários planos (planos vinculados que rodam juntos)
+export const useTakesByShots = (shotIds) =>
+  useLiveQuery(async () => alive(await getDb().takes.where('shot_id').anyOf(shotIds).toArray())
+    .sort((a, b) => b.take_number - a.take_number), [shotIds.join(',')])
+
 export const useTakesByProject = (projectId) =>
   useLiveQuery(async () => alive(await getDb().takes.where('project_id').equals(projectId).toArray()), [projectId])
 

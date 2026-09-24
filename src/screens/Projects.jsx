@@ -23,11 +23,12 @@ export default function Projects() {
     const out = {}
     const scenes = await db.scenes.toArray()
     const takes = await db.takes.toArray()
+    const shotsById = Object.fromEntries((await db.shots.toArray()).map((s) => [s.id, s]))
     for (const s of scenes) if (!s.deleted) (out[s.project_id] ||= { scenes: 0, takes: 0, last: null }).scenes++
     for (const t of takes) {
       if (t.deleted) continue
       const o = (out[t.project_id] ||= { scenes: 0, takes: 0, last: null })
-      ;(o.keys ||= new Set()).add(takeKey(t))
+      ;(o.keys ||= new Set()).add(takeKey(t, shotsById))
       o.takes = o.keys.size
       if (!o.last || t.shoot_date > o.last) o.last = t.shoot_date
     }

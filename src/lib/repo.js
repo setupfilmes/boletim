@@ -3,7 +3,7 @@ import { getDb, currentUserId, getMeta, setMeta } from './db'
 import { scheduleSync } from './sync'
 import { uuid, nowISO, todayISO, natCompare, incrCode } from './util'
 import { DEFAULT_KIT, kitItemId } from './kit'
-import { isMulticam, projectCameras, takeKey } from './cameras'
+import { isMulticam, projectCameras, shotCameras } from './cameras'
 
 function mark(row) {
   return { ...row, _dirty: 1, _rev: (row._rev || 0) + 1, _err: null }
@@ -137,23 +137,34 @@ function takeRow(shot, inProject, number, camera, when) {
   }
 }
 
-// Novo take (próximo número da claquete). Retorna as linhas criadas — uma por câmera no multicâmera:
-// as câmeras que rodaram no take anterior do plano (no 1º take do plano, as do último take do projeto);
-// sem histórico, todas as câmeras do projeto.
-export async function createNextTake(shot, project) {
+// Novo take (próximo número da claquete). Retorna as linhas criadas — uma por câmera no multicâmera.
+// Câmeras de cada plano: as definidas no plano (shot.cameras); senão as que rodaram no take anterior do plano
+// (no 1º take, as do último take do projeto); sem histórico, todas as do projeto que nenhum plano vinculado reservou.
+// `linked` = planos que rodam juntos (mesmo link_id): todos recebem o mesmo número, cada um com suas câmeras.
+export async function createNextTake(shot, project, linked = [shot]) {
   const inProject = await projectTakes(shot.project_id)
-  const inShot = inProject.filter((t) => t.shot_id === shot.id)
-  const last = inShot.length ? Math.max(...inShot.map((t) => t.take_number)) : 0
+  const ids = new Set(linked.map((s) => s.id))
+  const inGroup = inProject.filter((t) => ids.has(t.shot_id))
+  const last = inGroup.length ? Math.max(...inGroup.map((t) => t.take_number)) : 0
   const when = { date: todayISO(), at: nowISO() }
   if (!isMulticam(project)) return [await create('takes', takeRow(shot, inProject, last + 1, undefined, when))]
-  const ids = projectCameras(project).map((c) => c.id)
-  const ref = last ? inShot.filter((t) => t.take_number === last)
-    : inProject[0] ? inProject.filter((t) => takeKey(t) === takeKey(inProject[0])) : []
-  let cams = ids.filter((id) => ref.some((t) => t.camera === id))
-  if (!cams.length) cams = ids
+  const all = projectCameras(project).map((c) => c.id)
+  const reserved = new Set(linked.flatMap((s) => shotCameras(s) || []))
   const out = []
-  for (const c of cams) out.push(await create('takes', takeRow(shot, inProject, last + 1, c, when)))
-  return out
+  for (const s of linked) {
+    let cams = shotCameras(s)?.filter((c) => all.includes(c))
+    if (!cams?.length) {
+      const inShot = inProject.filter((t) => t.shot_id === s.id)
+      const lastInShot = inShot.length ? Math.max(...inShot.map((t) => t.take_number)) : 0
+      const ref = lastInShot ? inShot.filter((t) => t.take_number === lastInShot)
+        : linked.length === 1 && inProject[0] ? inProject.filter((t) => t.shot_id === inProject[0].shot_id && t.take_number === inProject[0].take_number) : []
+      cams = all.filter((id) => ref.some((t) => t.camera === id))
+      if (!cams.length && s.id === shot.id) cams = all.filter((c) => !reserved.has(c))
+      if (!cams.length && s.id === shot.id) cams = all
+    }
+    for (const c of cams) out.push(await create('takes', takeRow(s, inProject, last + 1, c, when)))
+  }
+  return out.sort((a, b) => (a.shot_id === shot.id ? 0 : 1) - (b.shot_id === shot.id ? 0 : 1))
 }
 
 // Inclui uma câmera num take que já existe (ela também rodou)

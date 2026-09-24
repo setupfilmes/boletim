@@ -66,11 +66,12 @@ function ScenesTab({ project, canEdit }) {
   const [batch, setBatch] = useState(false)
 
   const counts = useMemo(() => {
+    const shotsById = Object.fromEntries((shots || []).map((s) => [s.id, s]))
     const c = {}
     for (const s of shots || []) (c[s.scene_id] ||= { shots: 0, takes: 0, good: 0 }).shots++
     const byScene = {}
     for (const t of takes || []) (byScene[t.scene_id] ||= []).push(t)
-    for (const [id, list] of Object.entries(byScene)) Object.assign((c[id] ||= { shots: 0, takes: 0, good: 0 }), countTakes(list))
+    for (const [id, list] of Object.entries(byScene)) Object.assign((c[id] ||= { shots: 0, takes: 0, good: 0 }), countTakes(list, shotsById))
     return c
   }, [shots, takes])
 
