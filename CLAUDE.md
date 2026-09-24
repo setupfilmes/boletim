@@ -15,7 +15,8 @@ Contexto para o Claude Code continuar este projeto. Leia antes de mexer no códi
 - v2 construída do zero e testada (testes E2E com backend Supabase simulado — ver `tests/`).
 - Supabase: projeto criado, `supabase/schema.sql` já executado, "Confirm email" desligado.
 - `public/config.js` preenchido (projeto `gfqfmepxcqrvsnhfdviv`) e build gerado em 24/09/2026.
-- **Pendente:** publicar `dist/` no Netlify (drag-and-drop), configurar "Site URL" no Supabase, instalar no celular.
+- **No ar:** https://setupfilmes.github.io/boletim/ (GitHub Pages, repo público `setupfilmes/boletim`).
+- **Pendente:** configurar "Site URL" no Supabase, instalar e testar no S25+, iPhone e iPad.
 - Ainda **não testado com Supabase real nem em aparelho real** (Samsung S25+, iPhone, iPad).
 - A v1 (single-file, localStorage) foi abandonada; não há migração de dados dela.
 
@@ -122,13 +123,20 @@ a versão do Dexie em `openDb()` (`db.version(2).stores(...)` — nunca editar a
   `md:max-w-2xl`. Manifest `orientation: 'any'`.
 - Textos da interface em português do Brasil. Datas dd/mm/aaaa.
 
-## Deploy
+## Deploy (automático)
+
+Push na `main` → GitHub Action `.github/workflows/deploy.yml` (npm ci + build) → GitHub Pages.
+Endereço: https://setupfilmes.github.io/boletim/ . Acompanhar em github.com/setupfilmes/boletim/actions.
+O git local já está autenticado como `setupfilmes` (Git Credential Manager); não há `gh` instalado — para a API do
+GitHub, usar o token de `git credential fill` (sem exibi-lo). No Windows, mandar JSON para o curl via arquivo
+(`--data-binary @arquivo`): JSON inline no Git Bash chega corrompido.
 
 1. `public/config.js`: `SUPABASE_URL` = `https://<ref>.supabase.co`; `SUPABASE_ANON_KEY` = publishable key
-   (`sb_publishable_...`). **Nunca** a secret key.
-2. `npm run build` → arrastar a pasta `dist/` em app.netlify.com/drop (ou Deploys → arrastar, para atualizar).
-3. Supabase → Authentication → URL Configuration → Site URL = endereço do Netlify.
-4. Mudou só o `config.js`? Faça novo build/deploy para os aparelhos já instalados pegarem.
+   (`sb_publishable_...`). **Nunca** a secret key. O repo é **público**: nada de segredo no código.
+2. Supabase → Authentication → URL Configuration → Site URL = `https://setupfilmes.github.io/boletim/`
+   e Redirect URLs com `https://setupfilmes.github.io/boletim/**`.
+3. Os aparelhos instalados pegam a versão nova sozinhos (às vezes só na 2ª abertura do app).
+4. Mudou só o `config.js`? Faça push mesmo assim para os aparelhos já instalados pegarem.
 5. Supabase grátis pausa após 7 dias sem acesso (dados preservados; "Restore" no painel).
 
 ## Testes (`tests/`)
