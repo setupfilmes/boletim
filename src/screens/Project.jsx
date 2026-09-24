@@ -195,7 +195,7 @@ function InfoTab({ project, role, onDeleted }) {
   const [edit, setEdit] = useState(false)
   const { confirm, notify } = useDialog()
   const rows = [
-    ['Tipo', project.production_type], ['Produtora', project.company], ['Direção', project.director],
+    ['Nome do projeto', project.title], ['Tipo', project.production_type], ['Produtora', project.company], ['Direção', project.director],
     ['Dir. Fotografia', project.dop], ['1º AC', project.first_ac], ['2º AC', project.second_ac],
     ['DIT / Logger', project.logger], ['Câmera', project.camera_body],
     ['Lentes do projeto', (project.kit?.lens || []).join(', ') || 'Kit inteiro'],
@@ -205,10 +205,6 @@ function InfoTab({ project, role, onDeleted }) {
   return (
     <>
       <Card className="divide-y divide-line">
-        <div className="px-4 py-3" data-testid="info-title">
-          <div className="text-xs uppercase tracking-widest text-muted">Nome do projeto</div>
-          <div className="mt-1 break-words text-lg font-semibold">{project.title}</div>
-        </div>
         {rows.map(([k, v]) => (
           <div key={k} className="flex gap-3 px-4 py-3">
             <div className="w-36 shrink-0 text-xs uppercase tracking-widest text-muted">{k}</div>
