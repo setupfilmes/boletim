@@ -1,0 +1,76 @@
+@import "tailwindcss";
+@import "@fontsource/syne/600.css";
+@import "@fontsource/syne/700.css";
+@import "@fontsource/syne/800.css";
+@import "@fontsource/dm-mono/400.css";
+@import "@fontsource/dm-mono/500.css";
+
+/* Tema: escuro (padrão) e "Sol" (alto contraste para uso em externa) */
+:root {
+  --app-bg: #0a0a0b;
+  --app-surface: #141416;
+  --app-surface2: #1e1e21;
+  --app-line: #2c2c31;
+  --app-text: #f4f1ea;
+  --app-muted: #a39f95;
+  --app-accent: #f5b301;
+  --app-accent-ink: #0a0a0b;
+  --app-good: #22c55e;
+  --app-ng: #ef4444;
+  --app-check: #facc15;
+  color-scheme: dark;
+}
+:root[data-theme="sun"] {
+  --app-bg: #ffffff;
+  --app-surface: #f1f1f1;
+  --app-surface2: #e2e2e2;
+  --app-line: #9e9e9e;
+  --app-text: #000000;
+  --app-muted: #333333;
+  --app-accent: #000000;
+  --app-accent-ink: #ffe066;
+  --app-good: #1fae4f;
+  --app-ng: #c8141c;
+  --app-check: #ffcc00;
+  color-scheme: light;
+}
+
+@theme inline {
+  --color-bg: var(--app-bg);
+  --color-surface: var(--app-surface);
+  --color-surface2: var(--app-surface2);
+  --color-line: var(--app-line);
+  --color-ink: var(--app-text);
+  --color-muted: var(--app-muted);
+  --color-accent: var(--app-accent);
+  --color-accent-ink: var(--app-accent-ink);
+  --color-good: var(--app-good);
+  --color-ng: var(--app-ng);
+  --color-check: var(--app-check);
+  --font-display: "Syne", system-ui, sans-serif;
+  --font-mono: "DM Mono", ui-monospace, monospace;
+}
+
+html, body, #root { height: 100%; }
+body {
+  margin: 0;
+  background: var(--app-bg);
+  color: var(--app-text);
+  font-family: var(--font-mono);
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+  overscroll-behavior-y: none;
+}
+button { cursor: pointer; touch-action: manipulation; }
+.grid > * { min-width: 0; } /* evita que texto longo alargue a tela no celular */
+input, textarea, select { font-size: 16px; } /* evita zoom automático no iOS */
+
+/* utilitários em camada (não sobrescrevem pb-*, pt-* do Tailwind) */
+@utility safe-top { padding-top: env(safe-area-inset-top); }
+@utility safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+@utility pb-bar { padding-bottom: calc(1rem + env(safe-area-inset-bottom)); }
+
+@keyframes sheet-up { from { transform: translateY(100%); } to { transform: translateY(0); } }
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+.anim-sheet { animation: sheet-up .18s ease-out; }
+.anim-fade { animation: fade-in .15s ease-out; }
