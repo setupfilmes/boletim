@@ -322,7 +322,7 @@ function TakeCard({ group, take: t, multi, cams, project, canEdit, onCam, onAddC
             return (
               <button key={k} disabled={d} aria-pressed={on} onClick={() => !on && onSet('sound', k)} data-testid={`sound-${k}`}
                 className={`min-h-11 rounded-xl border-2 font-mono text-sm font-medium ${
-                  on ? (k === 'mos' ? 'border-check bg-check text-black' : 'border-accent bg-surface2 text-ink') : 'border-line text-muted'}`}>
+                  on ? 'border-accent bg-accent font-bold text-accent-ink' : 'border-line text-muted'}`}>
                 {lab}{k === 'mos' ? ' · sem som' : ''}
               </button>
             )
