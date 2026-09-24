@@ -6,6 +6,7 @@ import { useProject, useScene, useShots, useTakesByProject, useRole, useScenes }
 import { createShot, deleteShot, update } from '../lib/repo'
 import { useAuth } from '../auth'
 import { nextCode, plural } from '../lib/util'
+import { groupTakes } from '../lib/cameras'
 import { SceneForm } from './Project'
 
 export const SHOT_TYPES = ['PG', 'PC', 'PA', 'PM', 'PP', 'PPP', 'Detalhe', 'Insert', 'Plongée', 'Contra-plongée', 'Plano-sequência', 'Master']
@@ -30,16 +31,18 @@ export default function Scene() {
   const [form, setForm] = useState(null)
   const [editScene, setEditScene] = useState(false)
 
+  // Por plano: nº de takes (claquete), último take (todas as câmeras) e câmeras que rodaram juntas
   const byShot = useMemo(() => {
+    const rows = {}
+    for (const t of takes || []) if (t.scene_id === sceneId) (rows[t.shot_id] ||= []).push(t)
     const m = {}
-    for (const t of takes || []) {
-      if (t.scene_id !== sceneId) continue
-      const o = (m[t.shot_id] ||= { n: 0, last: null })
-      o.n++
-      if (!o.last || t.take_number > o.last.take_number) o.last = t
+    for (const [id, list] of Object.entries(rows)) {
+      const groups = groupTakes(list, project)
+      const multi = new Set(groups.filter((g) => g.rows.length > 1).flatMap((g) => g.rows.map((r) => r.camera)))
+      m[id] = { n: groups.length, last: groups[0], multicam: [...multi].sort().join('+') }
     }
     return m
-  }, [takes, sceneId])
+  }, [takes, sceneId, project])
 
   if (scene === undefined || project === undefined) return null
   if (!scene || scene.deleted) return (<><TopBar title="Cena" back={`/p/${projectId}`} /><Empty title="Cena não encontrada" /></>)
@@ -58,16 +61,26 @@ export default function Scene() {
         <div className="grid grid-cols-1 gap-2 md:grid-cols-2 lg:grid-cols-3">
           {shots?.map((s) => {
             const info = byShot[s.id]
-            const st = info?.last?.status && STATUS[info.last.status]
+            const last = info?.last
             return (
               <Card key={s.id} className="flex items-stretch">
                 <button className="flex min-h-16 min-w-0 flex-1 items-center gap-3 px-4 py-2 text-left" onClick={() => nav(`/p/${projectId}/s/${sceneId}/sh/${s.id}`)}>
                   <div className="min-w-16 shrink-0 font-display text-3xl font-extrabold text-accent">{scene.number}{/^\d/.test(s.code) ? '.' : ''}{s.code}</div>
                   <div className="min-w-0 flex-1">
                     <div className="truncate font-display font-bold">{s.shot_type || 'Plano'}{s.description ? ` — ${s.description}` : ''}</div>
-                    <div className="flex items-center gap-2 font-mono text-xs text-muted">
-                      <span>{plural(info?.n || 0, 'take')}</span>
-                      {st && <span className={`rounded border px-1 font-medium ${st.cls}`}>T{info.last.take_number} {st.label}</span>}
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-xs text-muted">
+                      <span className="whitespace-nowrap">{plural(info?.n || 0, 'take')}</span>
+                      {last && last.rows.some((r) => r.status) && (
+                        <span className="flex items-center gap-1 whitespace-nowrap">
+                          T{last.number}
+                          {last.rows.map((r) => r.status && (
+                            <span key={r.id} className={`rounded border px-1 font-medium ${STATUS[r.status].cls}`}>
+                              {last.rows.length > 1 ? `${r.camera} ` : ''}{STATUS[r.status].label}
+                            </span>
+                          ))}
+                        </span>
+                      )}
+                      {info?.multicam && <span className="shrink-0 rounded border border-accent px-1 font-medium text-accent" title="Rodou com mais de uma câmera">{info.multicam}</span>}
                     </div>
                   </div>
                   <IconChevron className="text-muted" />

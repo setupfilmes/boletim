@@ -1,6 +1,7 @@
 // Relatórios gerados 100% no aparelho (funciona sem internet)
 import { getDb } from './db'
 import { natCompare, fmtDate, fmtTime, joinFilters, plural } from './util'
+import { cameraOrder, projectCameras, takeKey } from './cameras'
 
 const STATUS_TXT = { good: 'GOOD', ng: 'NG', check: 'CHECK' }
 const STATUS_RGB = { good: [34, 197, 94], ng: [239, 68, 68], check: [250, 204, 21] }
@@ -13,12 +14,25 @@ export async function reportData(projectId, date = null) {
   let takes = (await db.takes.where('project_id').equals(projectId).toArray())
     .filter((t) => !t.deleted && scenes[t.scene_id] && !scenes[t.scene_id].deleted && shots[t.shot_id] && !shots[t.shot_id].deleted)
   if (date) takes = takes.filter((t) => t.shoot_date === date)
+  const camCmp = cameraOrder(project)
   takes.sort((a, b) =>
     (date ? 0 : String(a.shoot_date).localeCompare(String(b.shoot_date)))
     || natCompare(scenes[a.scene_id].number, scenes[b.scene_id].number)
     || natCompare(shots[a.shot_id].code, shots[b.shot_id].code)
-    || a.take_number - b.take_number)
+    || a.take_number - b.take_number
+    || camCmp(a.camera, b.camera))
+  // Multicâmera: câmeras que gravaram o mesmo take (mesmo plano + número da claquete)
+  const camsByTake = new Map()
+  for (const t of takes) {
+    const k = takeKey(t)
+    if (!camsByTake.has(k)) camsByTake.set(k, [])
+    camsByTake.get(k).push(t.camera || '?')
+  }
+  let group = -1
+  let prevKey = null
   const rows = takes.map((t) => ({
+    group: takeKey(t) === prevKey ? group : (prevKey = takeKey(t), ++group),
+    multicam: camsByTake.get(takeKey(t)).length > 1 ? camsByTake.get(takeKey(t)).join('+') : '',
     date: fmtDate(t.shoot_date),
     scene: scenes[t.scene_id].number,
     shot: shots[t.shot_id].code,
@@ -39,8 +53,22 @@ export async function reportData(projectId, date = null) {
     time: fmtTime(t.recorded_at),
     notes: t.notes || '',
   }))
+  // planos que rodaram com mais de uma câmera, na ordem do relatório: "12/1 (A+B)"
+  const multiShots = []
+  for (const t of takes) {
+    const cams = camsByTake.get(takeKey(t))
+    if (cams.length < 2) continue
+    const label = `${scenes[t.scene_id].number}/${shots[t.shot_id].code}`
+    let m = multiShots.find((x) => x.label === label)
+    if (!m) multiShots.push((m = { label, cams: new Set() }))
+    for (const c of cams) m.cams.add(c)
+  }
+  for (const m of multiShots) m.combo = [...m.cams].sort(camCmp).join('+')
   const summary = {
-    takes: rows.length,
+    takes: camsByTake.size,
+    records: rows.length,
+    multicamTakes: [...camsByTake.values()].filter((c) => c.length > 1).length,
+    multiShots,
     good: rows.filter((r) => r.status === 'good').length,
     ng: rows.filter((r) => r.status === 'ng').length,
     check: rows.filter((r) => r.status === 'check').length,
@@ -78,7 +106,9 @@ export async function buildPdf(projectId, date = null) {
   doc.text(pdfSafe(date ? `DIÁRIA ${fmtDate(date)}` : 'TODAS AS DIÁRIAS'), W - M, 10, { align: 'right' })
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(9)
-  doc.text(pdfSafe([project.production_type, project.company, project.camera_body].filter(Boolean).join('  ·  ')), W - M, 17, { align: 'right' })
+  const cams = projectCameras(project)
+  const bodies = cams.length >= 2 ? cams.map((c) => `${c.id}: ${c.body || '-'}`).join('  ') : project.camera_body
+  doc.text(pdfSafe([project.production_type, project.company, bodies].filter(Boolean).join('  ·  ')), W - M, 17, { align: 'right' })
 
   // Equipe e resumo
   doc.setTextColor(0, 0, 0)
@@ -93,36 +123,54 @@ export async function buildPdf(projectId, date = null) {
     x += kw + doc.getTextWidth(pdfSafe(v)) + 8
   }
   doc.setFont('helvetica', 'bold')
-  const sum = `${plural(summary.takes, 'take')}  ·  ${plural(summary.scenes, 'cena')}  ·  ${plural(summary.shots, 'plano')}  ·  GOOD ${summary.good}  ·  NG ${summary.ng}  ·  CHECK ${summary.check}`
+  const multi = summary.multicamTakes > 0
+  const sum = `${plural(summary.takes, 'take')}${summary.records !== summary.takes ? ` (${summary.records} registros de câmera)` : ''}`
+    + `  ·  ${plural(summary.scenes, 'cena')}  ·  ${plural(summary.shots, 'plano')}  ·  GOOD ${summary.good}  ·  NG ${summary.ng}  ·  CHECK ${summary.check}`
     + (summary.rolls.length ? `  ·  Cartões: ${summary.rolls.join(', ')}` : '')
   doc.text(pdfSafe(sum), M, 35.5)
+  let startY = 39
+  if (multi) {
+    doc.setFont('helvetica', 'normal')
+    const lines = doc.splitTextToSize(pdfSafe(`Multicâmera (mesma claquete gravada por mais de uma câmera) — ${plural(summary.multicamTakes, 'take')}, `
+      + `planos: ${summary.multiShots.map((m) => `${m.label} (${m.combo})`).join(', ')}`), W - 2 * M)
+    doc.text(lines, M, 40.5)
+    startY = 40.5 + lines.length * 3.6 + 1
+  }
 
-  const head = [[...(date ? [] : ['Data']), 'Cena', 'Plano', 'Take', 'Cam', 'Cartão', 'Clipe', 'Lente', 'T-Stop', 'Filtros',
+  const head = [[...(date ? [] : ['Data']), 'Cena', 'Plano', 'Take', 'Cam', ...(multi ? ['Multicam'] : []), 'Cartão', 'Clipe', 'Lente', 'T-Stop', 'Filtros',
     'Foco', 'ISO', 'Shutter', 'FPS', 'WB', 'Status', 'Hora', 'Notas pós / VFX']]
-  const body = rows.map((r) => [...(date ? [] : [r.date]), r.scene, r.shot, r.take, r.camera, r.roll, r.clip, r.lens, r.tstop,
+  const body = rows.map((r) => [...(date ? [] : [r.date]), r.scene, r.shot, r.take, r.camera, ...(multi ? [r.multicam] : []), r.roll, r.clip, r.lens, r.tstop,
     r.filters, r.focus, r.iso, r.shutter, r.fps, r.wb, STATUS_TXT[r.status] || '', r.time, r.notes].map(pdfSafe))
-  const statusCol = date ? 14 : 15
+  const statusCol = head[0].indexOf('Status')
+  const multiCol = head[0].indexOf('Multicam')
+  const notesCol = head[0].length - 1
 
   autoTable(doc, {
     head: head.map((h) => h.map(pdfSafe)),
     body,
-    startY: 39,
+    startY,
     margin: { left: M, right: M, bottom: 12 },
     theme: 'grid',
     styles: { font: 'helvetica', fontSize: 7.5, cellPadding: 1.4, lineColor: [190, 190, 190], lineWidth: 0.15, valign: 'middle', overflow: 'linebreak' },
     headStyles: { fillColor: [30, 30, 33], textColor: [245, 179, 1], fontStyle: 'bold', fontSize: 7 },
-    alternateRowStyles: { fillColor: [246, 246, 246] },
-    columnStyles: { [statusCol + 2]: { cellWidth: 55 } },
+    columnStyles: { [notesCol]: { cellWidth: multi ? 48 : 55 } },
     didParseCell: (d) => {
       if (d.section !== 'body') return
       const r = rows[d.row.index]
+      // sombreado por take (as câmeras do mesmo take ficam juntas)
+      if (r.group % 2) d.cell.styles.fillColor = [244, 244, 244]
+      if (d.column.index === multiCol && r.multicam) {
+        d.cell.styles.fillColor = [255, 236, 179]
+        d.cell.styles.fontStyle = 'bold'
+        d.cell.styles.halign = 'center'
+      }
       if (d.column.index === statusCol && r.status) {
         d.cell.styles.fillColor = STATUS_RGB[r.status]
         d.cell.styles.textColor = r.status === 'ng' ? [255, 255, 255] : [0, 0, 0]
         d.cell.styles.fontStyle = 'bold'
         d.cell.styles.halign = 'center'
       }
-      if (d.column.index <= (date ? 2 : 3)) d.cell.styles.fontStyle = 'bold'
+      if (d.column.index <= (date ? 2 : 3) + (multi ? 1 : 0)) d.cell.styles.fontStyle = 'bold'
     },
   })
 
@@ -142,7 +190,7 @@ export async function buildPdf(projectId, date = null) {
 export async function buildCsv(projectId, date = null) {
   const { project, rows } = await reportData(projectId, date)
   const cols = [['date', 'Data'], ['scene', 'Cena'], ['shot', 'Plano'], ['shotType', 'Enquadramento'], ['take', 'Take'],
-    ['camera', 'Câmera'], ['roll', 'Cartão'], ['clip', 'Clipe'], ['lens', 'Lente'], ['tstop', 'T-Stop'], ['filters', 'Filtros'],
+    ['camera', 'Câmera'], ['multicam', 'Multicam'], ['roll', 'Cartão'], ['clip', 'Clipe'], ['lens', 'Lente'], ['tstop', 'T-Stop'], ['filters', 'Filtros'],
     ['focus', 'Foco'], ['iso', 'ISO'], ['shutter', 'Shutter'], ['fps', 'FPS'], ['wb', 'WB'], ['status', 'Status'],
     ['time', 'Hora'], ['notes', 'Notas pós/VFX']]
   const esc = (v) => {

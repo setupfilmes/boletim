@@ -86,6 +86,23 @@ editar `schema.sql` mantendo idempotência (`if not exists`, `create or replace`
 e **também** atualizar `COLUMNS` em `src/lib/db.js` (lista do que é enviado no push) e, se criar índice local,
 a versão do Dexie em `openDb()` (`db.version(2).stores(...)` — nunca editar a versão 1).
 
+## Multicâmera (`src/lib/cameras.js`)
+
+- Câmeras do projeto em `project.kit.cameras = [{ id: 'A', body: 'Alexa Mini LF' }, …]` (dentro do jsonb `kit`,
+  **sem mudança de schema**). Com 2+ câmeras o projeto é multicâmera; com 0–1, tudo funciona como antes.
+- Modelo: **uma linha de `takes` por câmera** — o take da claquete é o grupo `shot_id + take_number`
+  (`takeKey`, `groupTakes`). Motivo: a sync é "último envio vence" por linha; linhas separadas = dois aparelhos
+  nunca sobrescrevem a câmera um do outro. Status, notas, cartão e clipe são por câmera.
+- Uso padrão do Antonio: **um AC anota todas as câmeras**. `+ TAKE` cria o take para as câmeras que rodaram no
+  take anterior do plano (sem histórico: todas as do projeto). "+ B" nas abas inclui uma câmera no take;
+  opções do take → "Câmera B não rodou" remove. Nº do take e diária editados valem para o grupo todo.
+- Grudados por câmera (`takeRow` em `repo.js`); câmera sem histórico herda só ISO/shutter/FPS/WB de qualquer câmera.
+- Contagens nas listas (`countTakes`) contam takes da claquete, não linhas.
+- PDF **combinado** (decisão do Antonio): coluna "Multicam" (A+B), sombreado por take, linha com os planos que
+  rodaram em multicâmera e corpo de cada câmera no cabeçalho. CSV também tem a coluna "Multicam".
+- Fora do escopo por enquanto: A e B em planos diferentes com a mesma claquete (ex.: A no 12A, B no 12B) —
+  hoje cada câmera registra no seu plano, sem vínculo entre eles.
+
 ## Mapa de arquivos
 
 - `src/App.jsx` rotas (HashRouter): `/`, `/p/:projectId?tab=cenas|diarias|equipe|info`, `/p/:pid/s/:sceneId`,

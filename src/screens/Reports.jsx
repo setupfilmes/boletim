@@ -4,6 +4,7 @@ import { IconFile, IconShare } from '../components/icons'
 import { useTakesByProject } from '../lib/hooks'
 import { buildCsv, buildPdf, downloadFile, shareFile } from '../lib/export'
 import { fmtDate, todayISO, plural } from '../lib/util'
+import { countTakes } from '../lib/cameras'
 
 export default function Reports({ project }) {
   const takes = useTakesByProject(project.id)
@@ -13,12 +14,11 @@ export default function Reports({ project }) {
   const days = useMemo(() => {
     const m = {}
     for (const t of takes || []) {
-      const o = (m[t.shoot_date] ||= { date: t.shoot_date, takes: 0, good: 0, scenes: new Set() })
-      o.takes++
-      if (t.status === 'good') o.good++
+      const o = (m[t.shoot_date] ||= { date: t.shoot_date, rows: [], scenes: new Set() })
+      o.rows.push(t)
       o.scenes.add(t.scene_id)
     }
-    return Object.values(m).sort((a, b) => b.date.localeCompare(a.date))
+    return Object.values(m).map((d) => ({ ...d, ...countTakes(d.rows) })).sort((a, b) => b.date.localeCompare(a.date))
   }, [takes])
 
   const run = async (key, fn, date, mode) => {

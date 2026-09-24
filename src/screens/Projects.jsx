@@ -8,6 +8,7 @@ import { getDb } from '../lib/db'
 import { createExampleProject } from '../lib/repo'
 import { useAuth } from '../auth'
 import { fmtDate } from '../lib/util'
+import { takeKey } from '../lib/cameras'
 import ProjectForm from './ProjectForm'
 
 export default function Projects() {
@@ -26,7 +27,8 @@ export default function Projects() {
     for (const t of takes) {
       if (t.deleted) continue
       const o = (out[t.project_id] ||= { scenes: 0, takes: 0, last: null })
-      o.takes++
+      ;(o.keys ||= new Set()).add(takeKey(t))
+      o.takes = o.keys.size
       if (!o.last || t.shoot_date > o.last) o.last = t.shoot_date
     }
     return out

@@ -26,6 +26,19 @@ export default function ProjectForm({ open, onClose, project, onSaved }) {
     return { ...s, kit: { ...s.kit, [cat]: next } }
   })
 
+  // Câmeras do projeto (multicâmera com 2+): kit.cameras = [{ id: 'A', body: 'Alexa Mini LF' }]
+  const camList = f.kit?.cameras || []
+  const toggleCam = (id) => setF((s) => {
+    const cur = s.kit?.cameras || []
+    const next = cur.some((c) => c.id === id) ? cur.filter((c) => c.id !== id) : [...cur, { id, body: '' }]
+    const order = kit.filter((k) => k.category === 'camera').map((k) => k.value)
+    next.sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id))
+    return { ...s, kit: { ...s.kit, cameras: next } }
+  })
+  const setBody = (id, body) => setF((s) => ({
+    ...s, kit: { ...s.kit, cameras: (s.kit?.cameras || []).map((c) => (c.id === id ? { ...c, body } : c)) },
+  }))
+
   const save = async () => {
     if (!f.title.trim()) return notify('Dê um nome ao projeto', 'error')
     const data = {
@@ -67,8 +80,29 @@ export default function ProjectForm({ open, onClose, project, onSaved }) {
           <TextInput label="1º AC" value={f.first_ac || ''} onChange={set('first_ac')} />
           <TextInput label="2º AC" value={f.second_ac || ''} onChange={set('second_ac')} />
           <TextInput label="DIT / Logger" value={f.logger || ''} onChange={set('logger')} />
-          <TextInput label="Câmera" value={f.camera_body || ''} onChange={set('camera_body')} placeholder="Alexa Mini LF" />
+          {camList.length < 2 && (
+            <TextInput label="Câmera" value={f.camera_body || ''} onChange={set('camera_body')} placeholder="Alexa Mini LF" />
+          )}
         </div>
+        <Field label="Câmeras do projeto"
+          hint={camList.length >= 2 ? 'Multicâmera: cada take é registrado por câmera, com status próprio.' : 'Marque 2 ou mais para registrar multicâmera.'}>
+          <div className="flex flex-wrap gap-2">
+            {kit.filter((k) => k.category === 'camera').map((k) => (
+              <button type="button" key={k.value} onClick={() => toggleCam(k.value)} data-testid={`project-cam-${k.value}`}
+                className={`min-h-11 min-w-12 rounded-lg border-2 px-3 font-display font-bold ${camList.some((c) => c.id === k.value) ? 'border-accent bg-accent text-accent-ink' : 'border-line bg-surface2'}`}>
+                {k.value}
+              </button>
+            ))}
+          </div>
+        </Field>
+        {camList.length >= 2 && (
+          <div className="grid grid-cols-2 gap-3">
+            {camList.map((c) => (
+              <TextInput key={c.id} label={`Câmera ${c.id}`} value={c.body || ''} onChange={(e) => setBody(c.id, e.target.value)}
+                placeholder={c.id === camList[0].id ? 'Alexa Mini LF' : 'FX6'} />
+            ))}
+          </div>
+        )}
         <KitPick cat="lens" label="Lentes" />
         <KitPick cat="filter" label="Filtros" />
         <TextArea label="Observações" value={f.notes || ''} onChange={set('notes')} />

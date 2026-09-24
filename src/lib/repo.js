@@ -3,6 +3,7 @@ import { getDb, currentUserId, getMeta, setMeta } from './db'
 import { scheduleSync } from './sync'
 import { uuid, nowISO, todayISO, natCompare, incrCode } from './util'
 import { DEFAULT_KIT, kitItemId } from './kit'
+import { isMulticam, projectCameras, takeKey } from './cameras'
 
 function mark(row) {
   return { ...row, _dirty: 1, _rev: (row._rev || 0) + 1, _err: null }
@@ -101,27 +102,72 @@ export async function deleteShot(id) {
 // ---------- Takes ----------
 export const STICKY_FIELDS = ['camera', 'roll', 'lens', 't_stop', 'filters', 'focus', 'iso', 'shutter', 'fps', 'wb']
 
-// Novo take: número seguinte e configurações "grudadas" do take anterior
-// (do mesmo plano; se for o primeiro take do plano, do último take gravado no projeto).
-// Clipe: continua a sequência do take gravado por último no mesmo cartão, em qualquer plano
-// (só se esse take tiver clipe — não pula números com base em takes mais antigos).
-export async function createNextTake(shot) {
-  const db = getDb()
-  const inProject = (await db.takes.where('project_id').equals(shot.project_id).toArray())
-    .filter((t) => !t.deleted)
-    .sort((a, b) => String(b.recorded_at || b.created_at).localeCompare(String(a.recorded_at || a.created_at)))
-  const inShot = inProject.filter((t) => t.shot_id === shot.id)
-  const source = inShot.length ? inShot.reduce((a, b) => (b.take_number > a.take_number ? b : a)) : inProject[0] || null
-  const next = inShot.length ? Math.max(...inShot.map((t) => t.take_number)) + 1 : 1
+// Campos que costumam ser iguais entre as câmeras do set: câmera sem histórico herda de qualquer câmera
+const SHARED_FIELDS = ['iso', 'shutter', 'fps', 'wb']
+const byRecent = (a, b) => String(b.recorded_at || b.created_at).localeCompare(String(a.recorded_at || a.created_at))
+const emptyOf = (f) => (f === 'filters' ? [] : null)
+
+async function projectTakes(projectId) {
+  return (await getDb().takes.where('project_id').equals(projectId).toArray()).filter((t) => !t.deleted).sort(byRecent)
+}
+
+// Monta uma linha de take com as configurações "grudadas".
+// camera === undefined → projeto de 1 câmera: tudo (inclusive a câmera) vem do take anterior
+// do mesmo plano; se for o 1º take do plano, do último take gravado no projeto.
+// Multicâmera: o mesmo, mas olhando só os takes daquela câmera.
+// Clipe: continua a sequência do take gravado por último no mesmo cartão (e mesma câmera), em qualquer
+// plano — só se esse take tiver clipe (não pula números com base em takes antigos).
+function takeRow(shot, inProject, number, camera, when) {
+  const multi = camera !== undefined
+  const same = multi ? (t) => (t.camera || null) === camera : () => true
+  const shotRows = inProject.filter((t) => t.shot_id === shot.id && same(t))
+  const source = shotRows.length ? shotRows.reduce((a, b) => (b.take_number > a.take_number ? b : a)) : inProject.find(same) || null
   const sticky = {}
-  for (const f of STICKY_FIELDS) sticky[f] = source ? source[f] ?? (f === 'filters' ? [] : null) : f === 'filters' ? [] : null
-  const lastOnCard = inProject.find((t) => (t.roll || null) === (sticky.roll || null))
-  const clip = lastOnCard?.clip ? incrCode(lastOnCard.clip) : null
-  return create('takes', {
-    project_id: shot.project_id, scene_id: shot.scene_id, shot_id: shot.id, take_number: next,
-    shoot_date: todayISO(), recorded_at: nowISO(), status: null, notes: null, clip,
+  for (const f of STICKY_FIELDS) sticky[f] = source ? source[f] ?? emptyOf(f) : emptyOf(f)
+  if (multi) {
+    sticky.camera = camera
+    if (!source && inProject[0]) for (const f of SHARED_FIELDS) sticky[f] = inProject[0][f] ?? null
+  }
+  const lastOnCard = inProject.find((t) => same(t) && (t.roll || null) === (sticky.roll || null))
+  return {
+    project_id: shot.project_id, scene_id: shot.scene_id, shot_id: shot.id, take_number: number,
+    shoot_date: when.date, recorded_at: when.at, status: null, notes: null,
+    clip: lastOnCard?.clip ? incrCode(lastOnCard.clip) : null,
     created_by: currentUserId(), ...sticky,
-  })
+  }
+}
+
+// Novo take (próximo número da claquete). Retorna as linhas criadas — uma por câmera no multicâmera:
+// as câmeras que rodaram no take anterior do plano (no 1º take do plano, as do último take do projeto);
+// sem histórico, todas as câmeras do projeto.
+export async function createNextTake(shot, project) {
+  const inProject = await projectTakes(shot.project_id)
+  const inShot = inProject.filter((t) => t.shot_id === shot.id)
+  const last = inShot.length ? Math.max(...inShot.map((t) => t.take_number)) : 0
+  const when = { date: todayISO(), at: nowISO() }
+  if (!isMulticam(project)) return [await create('takes', takeRow(shot, inProject, last + 1, undefined, when))]
+  const ids = projectCameras(project).map((c) => c.id)
+  const ref = last ? inShot.filter((t) => t.take_number === last)
+    : inProject[0] ? inProject.filter((t) => takeKey(t) === takeKey(inProject[0])) : []
+  let cams = ids.filter((id) => ref.some((t) => t.camera === id))
+  if (!cams.length) cams = ids
+  const out = []
+  for (const c of cams) out.push(await create('takes', takeRow(shot, inProject, last + 1, c, when)))
+  return out
+}
+
+// Inclui uma câmera num take que já existe (ela também rodou)
+export async function addCameraToTake(shot, group, camera) {
+  const inProject = await projectTakes(shot.project_id)
+  const first = group.rows[0]
+  return create('takes', takeRow(shot, inProject, group.number, camera, { date: first.shoot_date, at: first.recorded_at }))
+}
+
+export async function deleteTakes(ids) {
+  const db = getDb()
+  const rows = (await db.takes.bulkGet(ids)).filter(Boolean)
+  await softDeleteMany('takes', rows)
+  scheduleSync()
 }
 
 export async function deleteTake(id) {

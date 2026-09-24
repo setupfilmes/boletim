@@ -6,6 +6,7 @@ import { useProject, useScenes, useShotsByProject, useTakesByProject, useRole } 
 import { createScene, createScenesBatch, deleteProject, deleteScene, update } from '../lib/repo'
 import { useAuth } from '../auth'
 import { fmtDate, plural } from '../lib/util'
+import { countTakes } from '../lib/cameras'
 import ProjectForm from './ProjectForm'
 import Reports from './Reports'
 import Team from './Team'
@@ -67,11 +68,9 @@ function ScenesTab({ project, canEdit }) {
   const counts = useMemo(() => {
     const c = {}
     for (const s of shots || []) (c[s.scene_id] ||= { shots: 0, takes: 0, good: 0 }).shots++
-    for (const t of takes || []) {
-      const o = (c[t.scene_id] ||= { shots: 0, takes: 0, good: 0 })
-      o.takes++
-      if (t.status === 'good') o.good++
-    }
+    const byScene = {}
+    for (const t of takes || []) (byScene[t.scene_id] ||= []).push(t)
+    for (const [id, list] of Object.entries(byScene)) Object.assign((c[id] ||= { shots: 0, takes: 0, good: 0 }), countTakes(list))
     return c
   }, [shots, takes])
 
