@@ -6,6 +6,7 @@ import { IconPlus, IconChevron } from '../components/icons'
 import { useProjects } from '../lib/hooks'
 import { getDb } from '../lib/db'
 import { createExampleProject } from '../lib/repo'
+import { createDemoProject } from '../lib/demo'
 import { useAuth } from '../auth'
 import { fmtDate } from '../lib/util'
 import { takeKey } from '../lib/cameras'
@@ -49,6 +50,11 @@ export default function Projects() {
                 notify('Projeto de exemplo criado')
                 nav(`/p/${p.id}`)
               }}>Criar exemplo “A Tela” (32 cenas)</Btn>
+              <Btn variant="ghost" onClick={async () => {
+                const p = await createDemoProject(user?.name)
+                notify('Projeto de demonstração criado')
+                nav(`/p/${p.id}?tab=diarias`)
+              }}>Ver demonstração preenchida (4 diárias)</Btn>
             </div>
           </Empty>
         )}
