@@ -239,25 +239,3 @@ export async function ensureKitSeeded() {
 export function sortKit(items) {
   return [...items].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0) || natCompare(a.value, b.value))
 }
-
-// ---------- Projeto de exemplo ----------
-export async function createExampleProject(userName) {
-  const p = await createProject({
-    title: 'A Tela', production_type: 'Curta', company: 'Setup Filmes', director: 'Direção Exemplo',
-    dop: 'DoP Exemplo', first_ac: userName || '', second_ac: '', logger: '', camera_body: 'ARRI Alexa Mini',
-    notes: 'Projeto fictício para testar o app. Pode excluir quando quiser.',
-  })
-  const combos = [['INT', 'DIA'], ['EXT', 'DIA'], ['INT', 'NOITE'], ['EXT', 'NOITE']]
-  const numbers = Array.from({ length: 32 }, (_, i) => i + 1)
-  const db = getDb()
-  const uid = currentUserId()
-  const base = Date.now()
-  const scenes = numbers.map((n, i) => mark({
-    id: uuid(), project_id: p.id, number: String(n), int_ext: combos[i % 4][0], period: combos[i % 4][1],
-    location: i % 3 === 0 ? 'Apartamento' : i % 3 === 1 ? 'Rua' : 'Estúdio', description: null,
-    created_by: uid, sort_order: base + i, deleted: false, created_at: nowISO(),
-  }))
-  await db.scenes.bulkPut(scenes)
-  scheduleSync()
-  return p
-}

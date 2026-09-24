@@ -5,7 +5,6 @@ import { TopBar, Btn, Empty, Card, useDialog } from '../components/ui'
 import { IconPlus, IconChevron } from '../components/icons'
 import { useProjects } from '../lib/hooks'
 import { getDb } from '../lib/db'
-import { createExampleProject } from '../lib/repo'
 import { createDemoProject } from '../lib/demo'
 import { useAuth } from '../auth'
 import { fmtDate } from '../lib/util'
@@ -46,15 +45,10 @@ export default function Projects() {
             <div className="mt-6 grid gap-3">
               <Btn size="lg" onClick={() => setForm(true)}><IconPlus /> Novo projeto</Btn>
               <Btn variant="ghost" onClick={async () => {
-                const p = await createExampleProject(user?.name)
-                notify('Projeto de exemplo criado')
-                nav(`/p/${p.id}`)
-              }}>Criar exemplo “A Tela” (32 cenas)</Btn>
-              <Btn variant="ghost" onClick={async () => {
                 const p = await createDemoProject(user?.name)
                 notify('Projeto de demonstração criado')
                 nav(`/p/${p.id}?tab=diarias`)
-              }}>Ver demonstração preenchida (4 diárias)</Btn>
+              }} data-testid="empty-demo">Ver demonstração preenchida (4 diárias)</Btn>
             </div>
           </Empty>
         )}

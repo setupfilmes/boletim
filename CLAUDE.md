@@ -177,6 +177,8 @@ Os caminhos nos scripts são do ambiente original (Linux) — adapte antes de ro
 exemplo, takes via presets, campos grudados, offline + recarregar, PDF/CSV offline, sincronização ao voltar,
 compartilhamento entre 2 contas, soft delete, logout/login, sessão expirada offline, link de nova senha, layout iPad.
 Alternativa mais simples no Windows: Supabase CLI (`npx supabase start`, requer Docker).
+**Desatualizado:** `e2e.mjs` usa o projeto de exemplo "A Tela" (32 cenas), que foi removido do app (só existe
+a demonstração "Noite Adentro", `src/lib/demo.js`). Reescrever esses passos antes de rodar de novo.
 
 ## Ideias para próximas versões (não implementadas)
 
