@@ -193,7 +193,6 @@ function BatchScenes({ open, onClose, project, scenes }) {
 
 function InfoTab({ project, role, onDeleted }) {
   const [edit, setEdit] = useState(false)
-  const [rename, setRename] = useState(false)
   const { confirm, notify } = useDialog()
   const rows = [
     ['Tipo', project.production_type], ['Produtora', project.company], ['Direção', project.director],
@@ -206,12 +205,9 @@ function InfoTab({ project, role, onDeleted }) {
   return (
     <>
       <Card className="divide-y divide-line">
-        <div className="flex items-center gap-2 py-2 pr-2 pl-4" data-testid="info-title">
-          <div className="min-w-0 flex-1">
-            <div className="text-xs uppercase tracking-widest text-muted">Nome do projeto</div>
-            <div className="mt-1 break-words text-lg font-semibold">{project.title}</div>
-          </div>
-          {role !== 'viewer' && <IconBtn label="Alterar nome do projeto" onClick={() => setRename(true)} data-testid="rename-project"><IconEdit size={18} /></IconBtn>}
+        <div className="px-4 py-3" data-testid="info-title">
+          <div className="text-xs uppercase tracking-widest text-muted">Nome do projeto</div>
+          <div className="mt-1 break-words text-lg font-semibold">{project.title}</div>
         </div>
         {rows.map(([k, v]) => (
           <div key={k} className="flex gap-3 px-4 py-3">
@@ -233,26 +229,7 @@ function InfoTab({ project, role, onDeleted }) {
         {role === 'viewer' && <p className="text-center text-sm text-muted">Você tem acesso somente leitura a este projeto.</p>}
       </div>
       <ProjectForm open={edit} onClose={() => setEdit(false)} project={project} />
-      {rename && <RenameSheet project={project} onClose={() => setRename(false)} />}
     </>
-  )
-}
-
-function RenameSheet({ project, onClose }) {
-  const { notify } = useDialog()
-  const [title, setTitle] = useState(project.title || '')
-  const save = async () => {
-    if (!title.trim()) return notify('Dê um nome ao projeto', 'error')
-    await update('projects', project.id, { title: title.trim() })
-    notify('Nome alterado')
-    onClose()
-  }
-  return (
-    <Sheet open onClose={onClose} title="Nome do projeto"
-      footer={<Btn full onClick={save} data-testid="rename-save">Salvar nome</Btn>}>
-      <TextInput label="Nome do projeto" value={title} onChange={(e) => setTitle(e.target.value)} autoFocus maxLength={120}
-        onKeyDown={(e) => e.key === 'Enter' && save()} data-testid="rename-input" />
-    </Sheet>
   )
 }
 
