@@ -1,14 +1,17 @@
 name: Manter Supabase acordado
 
-# O plano grátis do Supabase pausa o projeto após 7 dias sem uso (o app segue offline, mas para de sincronizar).
-# A cada 3 dias chama a função public.ping() com a chave pública do app (a mesma do public/config.js).
+# O plano grátis do Supabase pausa o projeto sem uso (o app segue offline, mas para de sincronizar).
+# Todo dia grava um batimento no banco (função public.heartbeat, com a chave pública do public/config.js)
+# e confere que foi gravado. Se falhar, o GitHub manda e-mail de "workflow failed".
+# O GitHub desliga tarefas agendadas de repositórios sem commits há 60 dias: a última etapa religa esta tarefa.
 on:
   schedule:
-    - cron: '17 11 */3 * *'
+    - cron: '17 11 * * *' # todo dia, 08:17 de Brasília
   workflow_dispatch:
 
 permissions:
   contents: read
+  actions: write
 
 jobs:
   ping:
@@ -17,9 +20,27 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Ping no banco
+      - name: Batimento no banco
         run: |
           URL=$(grep -o "SUPABASE_URL: *'[^']*'" public/config.js | cut -d"'" -f2)
           KEY=$(grep -o "SUPABASE_ANON_KEY: *'[^']*'" public/config.js | cut -d"'" -f2)
-          curl -sS --fail-with-body -X POST "$URL/rest/v1/rpc/ping" \
-            -H "apikey: $KEY" -H "Content-Type: application/json" -d '{}'
+          if ! getent hosts "${URL#https://}" > /dev/null; then
+            echo "::error::O endereço do Supabase não existe na internet: o projeto provavelmente foi PAUSADO. Abra supabase.com/dashboard e clique em Restore."
+            exit 1
+          fi
+          OUT=$(curl -sS -w '\n%{http_code}' -X POST "$URL/rest/v1/rpc/heartbeat" \
+            -H "apikey: $KEY" -H "Content-Type: application/json" -d '{"p_origin":"github"}')
+          CODE=$(echo "$OUT" | tail -1)
+          echo "Resposta: $(echo "$OUT" | head -1) (HTTP $CODE)"
+          if [ "$CODE" = "404" ]; then
+            echo "::warning::Função heartbeat ainda não existe — rode supabase/atualizacao-2026-10-17-batimento.sql. Usando o ping antigo."
+            curl -sS --fail-with-body -X POST "$URL/rest/v1/rpc/ping" -H "apikey: $KEY" -H "Content-Type: application/json" -d '{}'
+          elif [ "$CODE" != "200" ]; then
+            echo "::error::Batimento falhou (HTTP $CODE)."
+            exit 1
+          fi
+
+      - name: Manter esta tarefa ligada
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow enable keepalive.yml --repo "$GITHUB_REPOSITORY" || true

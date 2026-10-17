@@ -163,7 +163,11 @@ a versão do Dexie em `openDb()` (`db.version(2).stores(...)` — nunca editar a
 
 ## Operação
 
-- `.github/workflows/keepalive.yml`: a cada 3 dias chama `rpc/ping` (Supabase grátis pausa após 7 dias sem uso).
+- `.github/workflows/keepalive.yml`: **todo dia** (08:17 BRT) chama `rpc/heartbeat` (grava/atualiza uma linha em
+  `public.heartbeat` — escrita real; o `ping` só de leitura não impediu a pausa de 16/10/2026, 3 dias após um ping
+  ok). Detecta projeto pausado (DNS do `<ref>.supabase.co` some → NXDOMAIN) e falha com mensagem clara (e-mail do
+  GitHub); cai no `ping` se a função ainda não existir; religa a própria tarefa (`gh workflow enable`) por causa
+  da regra de 60 dias sem commit. SQL: `atualizacao-2026-10-17-batimento.sql`.
   O GitHub desativa workflows agendados em repositório sem commits por 60 dias — reativar em Actions se parar.
 - Dono do projeto: `transfer_project(project, new_owner)` (RPC; aba Equipe → "Tornar dono"; o antigo vira
   editor). `projects.owner_id` agora é `on delete restrict`: apagar no painel uma conta dona de projetos falha.
