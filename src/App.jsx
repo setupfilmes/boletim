@@ -12,6 +12,7 @@ import Scene from './screens/Scene'
 import Shot from './screens/Shot'
 import Kit from './screens/Kit'
 import Account from './screens/Account'
+import ShareWatcher from './components/ShareWatcher'
 
 function BottomNav() {
   const { pathname } = useLocation()
@@ -49,6 +50,7 @@ function Gate() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       <BottomNav />
+      <ShareWatcher />
     </HashRouter>
   )
 }

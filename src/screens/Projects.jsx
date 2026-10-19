@@ -11,6 +11,7 @@ import { fmtDate } from '../lib/util'
 import { takeKey } from '../lib/cameras'
 import ProjectForm from './ProjectForm'
 import InstallHint from '../components/InstallHint'
+import { dismissShares, useNewShares } from '../lib/shares'
 
 export default function Projects() {
   const projects = useProjects()
@@ -18,6 +19,8 @@ export default function Projects() {
   const nav = useNavigate()
   const { notify } = useDialog()
   const [form, setForm] = useState(false)
+  const newShares = useNewShares()
+  const isNew = new Set(newShares.map((s) => s.project_id))
 
   const stats = useLiveQuery(async () => {
     const db = getDb()
@@ -41,6 +44,23 @@ export default function Projects() {
       <TopBar title="Projetos" subtitle={user?.name || user?.email} />
       <main className="mx-auto max-w-5xl px-4 pt-4 pb-28">
         <InstallHint />
+        {newShares.map((s) => {
+          const p = projects?.find((x) => x.id === s.project_id)
+          if (!p) return null
+          return (
+            <Card key={s.project_id} className="mb-3 border-accent p-4" data-testid="share-notice">
+              <div className="text-xs uppercase tracking-widest text-accent">Projeto compartilhado com você</div>
+              <div className="mt-1 truncate font-display text-xl font-extrabold">{p.title}</div>
+              <div className="mt-0.5 text-sm text-muted">
+                {s.by ? `por ${s.by} · ` : ''}{s.role === 'viewer' ? 'você pode visualizar' : 'você pode editar'}
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                <Btn size="sm" onClick={() => { dismissShares(s.project_id); nav(`/p/${p.id}`) }}>Abrir</Btn>
+                <Btn size="sm" variant="surface" onClick={() => dismissShares(s.project_id)} data-testid="share-ok">OK</Btn>
+              </div>
+            </Card>
+          )
+        })}
         {projects && projects.length === 0 && (
           <Empty title="Nenhum projeto ainda">
             Crie seu primeiro projeto. Tudo fica salvo no celular e sincroniza quando houver internet.
@@ -65,6 +85,7 @@ export default function Projects() {
                     <div className="flex items-center gap-2 text-xs uppercase tracking-widest text-muted">
                       <span>{p.production_type || 'Projeto'}</span>
                       {shared && <span className="rounded border border-accent px-1 text-accent">Compartilhado</span>}
+                      {isNew.has(p.id) && <span className="rounded bg-accent px-1 font-bold text-accent-ink">Novo</span>}
                       {p._err && <span className="text-ng">Erro ao enviar</span>}
                     </div>
                     <div className="truncate font-display text-2xl font-extrabold">{p.title}</div>

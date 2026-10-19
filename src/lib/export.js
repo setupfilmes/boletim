@@ -27,8 +27,17 @@ export async function reportData(projectId, date = null) {
     if (leadCode[k] == null || natCompare(sh.code, leadCode[k]) < 0) leadCode[k] = sh.code
   }
   const lead = (t) => leadCode[shots[t.shot_id].link_id || t.shot_id] ?? shots[t.shot_id].code
+  // Ordem de gravação (coluna Hora): diária, depois a hora do take. As câmeras do mesmo take (e os planos
+  // vinculados) ficam juntas, na hora do primeiro registro do grupo. Sem hora: cena/plano/take como desempate.
+  const startOf = {}
+  for (const t of takes) {
+    const k = key(t)
+    const at = t.recorded_at || ''
+    if (startOf[k] == null || (at && (!startOf[k] || at < startOf[k]))) startOf[k] = at
+  }
   takes.sort((a, b) =>
     (date ? 0 : String(a.shoot_date).localeCompare(String(b.shoot_date)))
+    || String(startOf[key(a)]).localeCompare(String(startOf[key(b)]))
     || natCompare(scenes[a.scene_id].number, scenes[b.scene_id].number)
     || natCompare(lead(a), lead(b))
     || a.take_number - b.take_number

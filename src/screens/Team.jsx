@@ -13,6 +13,7 @@ export default function Team({ project, role }) {
   const { user, sessionOk } = useAuth()
   const { notify, confirm } = useDialog()
   const [members, setMembers] = useState(null)
+  const [invites, setInvites] = useState([])
   const [err, setErr] = useState(null)
   const [email, setEmail] = useState('')
   const [newRole, setNewRole] = useState('editor')
@@ -26,6 +27,9 @@ export default function Team({ project, role }) {
     const { data, error } = await supabase.from('project_members').select('*').eq('project_id', project.id).order('created_at')
     if (error) setErr(navigator.onLine ? error.message : 'Sem internet')
     else setMembers(data)
+    // convites guardados (e-mails que ainda não criaram conta) — só o dono vê; sem a tabela no banco, fica vazio
+    const inv = await supabase.from('project_invites').select('*').eq('project_id', project.id).order('created_at')
+    setInvites(inv.error ? [] : inv.data)
   }, [project.id, sessionOk])
 
   useEffect(() => { load() }, [load])
@@ -33,11 +37,24 @@ export default function Team({ project, role }) {
   const add = async (e) => {
     e.preventDefault()
     setBusy(true)
-    const { error } = await supabase.rpc('add_project_member', { p_project: project.id, p_email: email, p_role: newRole })
+    const args = { p_project: project.id, p_email: email, p_role: newRole }
+    let { data, error } = await supabase.rpc('share_project', args)
+    if (error?.code === 'PGRST202') ({ error } = await supabase.rpc('add_project_member', args)) // banco sem a atualização de 19/10
     setBusy(false)
     if (error) return notify(error.message.replace(/^.*?:\s*/, ''), 'error')
+    const who = email.trim().toLowerCase()
     setEmail('')
-    notify('Pessoa adicionada')
+    notify(data === 'invited'
+      ? `Convite guardado: quando ${who} criar a conta no app com este e-mail, o projeto aparece para essa pessoa.`
+      : `${who} foi adicionado. O projeto aparece na lista dessa pessoa em instantes.`)
+    load()
+  }
+
+  const removeInvite = async (i) => {
+    if (!(await confirm({ title: 'Cancelar convite', danger: true, confirmLabel: 'Cancelar convite',
+      message: `Cancelar o convite para ${i.email}?` }))) return
+    const { error } = await supabase.from('project_invites').delete().eq('project_id', project.id).eq('email', i.email)
+    if (error) return notify(error.message, 'error')
     load()
   }
 
@@ -69,7 +86,8 @@ export default function Team({ project, role }) {
   return (
     <div className="grid gap-4">
       <p className="text-sm text-muted">
-        Compartilhe este projeto com outros assistentes. Eles precisam ter uma conta no app. Quem pode editar registra takes
+        Compartilhe este projeto com outros assistentes pelo e-mail. Se a pessoa ainda não tem conta, o convite fica guardado
+        e o projeto aparece para ela assim que criar a conta com esse e-mail. Quem pode editar registra takes
         normalmente; tudo sincroniza entre os aparelhos. O dono pode passar o projeto para outra pessoa da equipe (“Tornar dono”).
       </p>
       {err && <div className="rounded-xl border-2 border-ng p-3 text-sm text-ng">{err}</div>}
@@ -88,6 +106,17 @@ export default function Team({ project, role }) {
             </div>
             {isOwner && <Btn size="sm" variant="ghost" onClick={() => transfer(m)} data-testid="transfer">Tornar dono</Btn>}
             {(isOwner || m.user_id === user.id) && <IconBtn label="Remover" onClick={() => remove(m)}><IconTrash /></IconBtn>}
+          </div>
+        ))}
+        {invites.map((i) => (
+          <div key={i.email} className="flex items-center gap-3 px-4 py-2" data-testid="invite">
+            <div className="min-w-0 flex-1">
+              <div className="truncate font-bold text-muted">{i.email}</div>
+              <div className="text-xs uppercase tracking-widest text-check">
+                Convite pendente · {i.role === 'viewer' ? 'Só visualizar' : 'Pode editar'}
+              </div>
+            </div>
+            {isOwner && <IconBtn label="Cancelar convite" onClick={() => removeInvite(i)}><IconTrash /></IconBtn>}
           </div>
         ))}
       </Card>

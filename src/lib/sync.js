@@ -23,6 +23,7 @@ let enabled = false // só sincroniza com sessão válida
 let running = false
 let again = false
 let timer = null
+let claimed = false // convites guardados: pede uma vez por sessão (o gatilho do banco já cuida no cadastro)
 
 export function setSyncEnabled(v) {
   enabled = v
@@ -137,6 +138,18 @@ async function pull() {
   const db = getDb()
   const firstSync = !(await getMeta('cursor:takes'))
 
+  // convites guardados para o meu e-mail viram participação (sem a função no banco, só ignora)
+  if (!claimed) {
+    const { error: ec } = await supabase.rpc('claim_my_invites')
+    if (!ec || ec.code === 'PGRST202') claimed = true
+  }
+  // avisos de compartilhamento já vistos neste aparelho
+  const seenPending = await getMeta('sharesSeenPending', [])
+  if (seenPending.length) {
+    const { error: es } = await supabase.rpc('mark_shares_seen', { p_projects: seenPending })
+    if (!es || es.code === 'PGRST202') await setMeta('sharesSeenPending', [])
+  }
+
   // 1) Projetos: sempre a lista completa (é pequena) — detecta projetos novos, compartilhados ou removidos
   const { data: projects, error } = await supabase.from('projects').select('*')
   if (error) throw error
@@ -147,9 +160,13 @@ async function pull() {
   for (const p of projects) await applyRow('projects', p)
 
   // minhas permissões nos projetos compartilhados (editor / viewer)
-  const { data: mine, error: e2 } = await supabase.from('project_members').select('project_id, role').eq('user_id', currentUserId())
+  const { data: mine, error: e2 } = await supabase.from('project_members').select('*').eq('user_id', currentUserId())
   if (e2) throw e2
   await setMeta('roles', Object.fromEntries(mine.map((m) => [m.project_id, m.role])))
+  // compartilhamentos ainda não vistos -> aviso na tela (seen_at só existe depois da atualização de 19/10/2026)
+  const stillPending = await getMeta('sharesSeenPending', [])
+  await setMeta('newShares', mine.filter((m) => 'seen_at' in m && !m.seen_at && !stillPending.includes(m.project_id) && serverIds.has(m.project_id))
+    .map((m) => ({ project_id: m.project_id, role: m.role, by: m.added_by_email || null, at: m.created_at })))
   // perdeu o acesso (ou foi excluído no servidor): remove do aparelho, se não houver nada pendente
   for (const lp of localProjects) {
     if (!serverIds.has(lp.id) && !lp._dirty) await removeProjectLocal(lp.id)

@@ -163,6 +163,14 @@ a versão do Dexie em `openDb()` (`db.version(2).stores(...)` — nunca editar a
 
 ## Operação
 
+- Compartilhamento (`Team.jsx`, SQL `atualizacao-2026-10-19-convites.sql`): `share_project` → 'added' (conta existe)
+  ou 'invited' (guarda em `project_invites`; o gatilho `claim_invites_on_signup` em `auth.users` transforma em
+  membro quando o e-mail é confirmado; o app também chama `claim_my_invites` 1x por sessão). Aviso: `project_members`
+  tem `added_by_email`/`seen_at`; a sync grava os não vistos em `meta.newShares` → cartão "Abrir/OK" + selo "Novo"
+  na lista (`Projects.jsx`) e toast global (`ShareWatcher`); dispensar → `meta.sharesSeenPending` →
+  `mark_shares_seen` na próxima sync. Cliente tolera banco sem a atualização (fallback para `add_project_member`).
+- Relatórios (PDF/Planilha/DIT/ALE) em **ordem de gravação**: diária → hora do 1º registro do grupo do take
+  (`startOf[takeKey]`); câmeras do mesmo take e planos vinculados juntos.
 - `.github/workflows/keepalive.yml`: **todo dia** (08:17 BRT) chama `rpc/heartbeat` (grava/atualiza uma linha em
   `public.heartbeat` — escrita real; o `ping` só de leitura não impediu a pausa de 16/10/2026, 3 dias após um ping
   ok). Detecta projeto pausado (DNS do `<ref>.supabase.co` some → NXDOMAIN) e falha com mensagem clara (e-mail do
