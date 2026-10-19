@@ -5,12 +5,15 @@ import { useTakesByProject, useShotsByProject } from '../lib/hooks'
 import { buildCsv, buildPdf, buildDitCsv, buildAle, downloadFile, shareFile } from '../lib/export'
 import { fmtDate, todayISO, plural } from '../lib/util'
 import { countTakes } from '../lib/cameras'
+import { useDays, dayLabel } from '../lib/days'
 
 export default function Reports({ project }) {
   const takes = useTakesByProject(project.id)
   const shots = useShotsByProject(project.id)
   const { notify, actionSheet } = useDialog()
   const [busy, setBusy] = useState(null)
+  const daysList = useDays(project.id)
+  const dayNum = Object.fromEntries((daysList || []).map((d) => [d.date, d.number]))
 
   const days = useMemo(() => {
     const m = {}
@@ -70,6 +73,7 @@ export default function Reports({ project }) {
       {days.map((d) => (
         <Card key={d.date} className="p-4">
           <div className="flex items-center gap-3">
+            {dayNum[d.date] != null && <div className="font-display text-2xl font-extrabold text-accent">{dayLabel(dayNum[d.date])}</div>}
             <div className="font-display text-2xl font-extrabold">{fmtDate(d.date)}</div>
             {d.date === todayISO() && <span className="rounded border border-accent px-1 text-xs font-bold text-accent">HOJE</span>}
           </div>

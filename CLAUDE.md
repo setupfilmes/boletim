@@ -169,7 +169,15 @@ a versão do Dexie em `openDb()` (`db.version(2).stores(...)` — nunca editar a
   tem `added_by_email`/`seen_at`; a sync grava os não vistos em `meta.newShares` → cartão "Abrir/OK" + selo "Novo"
   na lista (`Projects.jsx`) e toast global (`ShareWatcher`); dispensar → `meta.sharesSeenPending` →
   `mark_shares_seen` na próxima sync. Cliente tolera banco sem a atualização (fallback para `add_project_member`).
-- Relatórios (PDF/Planilha/DIT/ALE) em **ordem de gravação**: diária → hora do 1º registro do grupo do take
+- **Diárias** (`src/lib/days.js`, `screens/Day.jsx`, SQL `atualizacao-2026-10-19-diarias.sql`): aba "Diárias" do
+  projeto = pastas Dia 01, Dia 02… (+ "Roteiro" com todas as cenas). `shoot_days` (número + data; takes pertencem
+  pela `shoot_date`) e `day_scenes` (cena na diária + `sort_order` = ordem de gravação arrumada com ▲▼). Cena gravada
+  em 2 dias aparece nos 2. Diária/cena-na-diária que surgem de takes são "virtuais" em `deriveDays` com id
+  determinístico (`stableUuid`) e `ensureDays` grava (ao abrir o projeto e em `createNextTake`) — 2 aparelhos geram
+  a mesma linha. Cena com takes no dia não sai da pasta. Mudar a data da diária leva os takes junto. Cena/plano
+  abertos de uma diária levam `?dia=`: plano mostra só os takes do dia (botão para ver os outros), numeração
+  continua, take novo usa a data da diária (`whenForDay`). Sync ignora tabela ausente (PGRST205) sem travar.
+- Relatórios (PDF/Planilha/DIT/ALE) em **ordem de gravação**: diária → cena na ordem da pasta da diária → hora do 1º registro do grupo do take
   (`startOf[takeKey]`); câmeras do mesmo take e planos vinculados juntos.
 - `.github/workflows/keepalive.yml`: **todo dia** (08:17 BRT) chama `rpc/heartbeat` (grava/atualiza uma linha em
   `public.heartbeat` — escrita real; o `ping` só de leitura não impediu a pausa de 16/10/2026, 3 dias após um ping

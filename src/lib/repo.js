@@ -5,6 +5,7 @@ import { uuid, nowISO, todayISO, natCompare, incrCode } from './util'
 import { DEFAULT_KIT, kitItemId } from './kit'
 import { isMulticam, projectCameras, shotCameras } from './cameras'
 import { EXTRA_FIELDS } from './fields'
+import { ensureDays } from './days'
 
 function mark(row) {
   return { ...row, _dirty: 1, _rev: (row._rev || 0) + 1, _err: null }
@@ -43,7 +44,9 @@ export async function createProject(data) {
 
 export async function deleteProject(id) {
   const db = getDb()
-  await db.transaction('rw', db.projects, db.scenes, db.shots, db.takes, async () => {
+  await db.transaction('rw', [db.projects, db.scenes, db.shoot_days, db.day_scenes, db.shots, db.takes], async () => {
+    await db.day_scenes.where('project_id').equals(id).delete()
+    await db.shoot_days.where('project_id').equals(id).delete()
     await db.scenes.where('project_id').equals(id).delete()
     await db.shots.where('project_id').equals(id).delete()
     await db.takes.where('project_id').equals(id).delete()
@@ -72,11 +75,12 @@ export async function createScenesBatch(projectId, numbers, common = {}) {
 
 export async function deleteScene(id) {
   const db = getDb()
-  await db.transaction('rw', db.scenes, db.shots, db.takes, async () => {
+  await db.transaction('rw', [db.scenes, db.shots, db.takes, db.day_scenes], async () => {
     const shots = await db.shots.where('scene_id').equals(id).toArray()
     const takes = await db.takes.where('scene_id').equals(id).toArray()
     await softDeleteMany('takes', takes)
     await softDeleteMany('shots', shots)
+    await softDeleteMany('day_scenes', (await db.day_scenes.where('scene_id').equals(id).toArray()).filter((r) => !r.deleted))
     const s = await db.scenes.get(id)
     if (s) await db.scenes.put(mark({ ...s, deleted: true }))
   })
@@ -150,13 +154,17 @@ function takeRow(shot, inProject, number, camera, when) {
 // Câmeras de cada plano: as definidas no plano (shot.cameras); senão as que rodaram no take anterior do plano
 // (no 1º take, as do último take do projeto); sem histórico, todas as do projeto que nenhum plano vinculado reservou.
 // `linked` = planos que rodam juntos (mesmo link_id): todos recebem o mesmo número, cada um com suas câmeras.
-export async function createNextTake(shot, project, linked = [shot]) {
+export async function createNextTake(shot, project, linked = [shot], at = null) {
   const inProject = await projectTakes(shot.project_id)
   const ids = new Set(linked.map((s) => s.id))
   const inGroup = inProject.filter((t) => ids.has(t.shot_id))
   const last = inGroup.length ? Math.max(...inGroup.map((t) => t.take_number)) : 0
-  const when = { date: todayISO(), at: nowISO() }
-  if (!isMulticam(project)) return [await create('takes', takeRow(shot, inProject, last + 1, undefined, when))]
+  const when = at || { date: todayISO(), at: nowISO() }
+  if (!isMulticam(project)) {
+    const rows = [await create('takes', takeRow(shot, inProject, last + 1, undefined, when))]
+    await ensureDays(shot.project_id)
+    return rows
+  }
   const all = projectCameras(project).map((c) => c.id)
   const reserved = new Set(linked.flatMap((s) => shotCameras(s) || []))
   const out = []
@@ -173,6 +181,7 @@ export async function createNextTake(shot, project, linked = [shot]) {
     }
     for (const c of cams) out.push(await create('takes', takeRow(s, inProject, last + 1, c, when)))
   }
+  await ensureDays(shot.project_id) // a cena entra (no fim) na pasta da diária, criando a diária se preciso
   return out.sort((a, b) => (a.shot_id === shot.id ? 0 : 1) - (b.shot_id === shot.id ? 0 : 1))
 }
 

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { useNavigate, useParams } from 'react-router'
+import { useNavigate, useParams, useSearchParams } from 'react-router'
 import { TopBar, Btn, Empty, Card, Sheet, TextInput, TextArea, ChipSelect, Field, IconBtn, useDialog } from '../components/ui'
 import { IconPlus, IconMore, IconEdit, IconTrash, IconChevron } from '../components/icons'
 import { useProject, useScene, useShots, useTakesByProject, useRole, useScenes } from '../lib/hooks'
@@ -8,6 +8,7 @@ import { useAuth } from '../auth'
 import { nextCode, plural, uuid } from '../lib/util'
 import { groupTakes, isMulticam, projectCameras, linkedShots, shotCameras, shotLabel } from '../lib/cameras'
 import { SceneForm } from './Project'
+import { useDays, dayLabel } from '../lib/days'
 
 export const SHOT_TYPES = ['PG', 'PC', 'PA', 'PM', 'PP', 'PPP', 'Detalhe', 'Insert', 'Plongée', 'Contra-plongée', 'Plano-sequência', 'Master']
 
@@ -30,28 +31,35 @@ export default function Scene() {
   const { actionSheet, confirm, notify } = useDialog()
   const [form, setForm] = useState(null)
   const [editScene, setEditScene] = useState(false)
+  // aberta de dentro de uma diária (?dia=): mostra o que foi gravado naquele dia e cria takes com a data dela
+  const [params] = useSearchParams()
+  const days = useDays(projectId)
+  const day = days?.find((d) => d.id === params.get('dia')) || null
+  const q = day ? `?dia=${day.id}` : ''
+  const backTo = day ? `/p/${projectId}/d/${day.id}` : `/p/${projectId}?tab=cenas&ver=roteiro`
 
   // Por plano: nº de takes (claquete), último take (todas as câmeras) e câmeras que rodaram juntas
   const byShot = useMemo(() => {
     const rows = {}
     for (const t of takes || []) if (t.scene_id === sceneId) (rows[t.shot_id] ||= []).push(t)
     const m = {}
-    for (const [id, list] of Object.entries(rows)) {
+    for (const [id, all] of Object.entries(rows)) {
+      const list = day ? all.filter((t) => t.shoot_date === day.date) : all
       const groups = groupTakes(list, project)
       const multi = new Set(groups.filter((g) => g.rows.length > 1).flatMap((g) => g.rows.map((r) => r.camera)))
-      m[id] = { n: groups.length, last: groups[0], multicam: [...multi].sort().join('+') }
+      m[id] = { n: groups.length, total: groupTakes(all, project).length, last: groups[0], multicam: [...multi].sort().join('+') }
     }
     return m
-  }, [takes, sceneId, project])
+  }, [takes, sceneId, project, day])
 
   if (scene === undefined || project === undefined) return null
-  if (!scene || scene.deleted) return (<><TopBar title="Cena" back={`/p/${projectId}`} /><Empty title="Cena não encontrada" /></>)
+  if (!scene || scene.deleted) return (<><TopBar title="Cena" back={backTo} /><Empty title="Cena não encontrada" /></>)
 
-  const sub = [project?.title, [scene.int_ext, scene.period].filter(Boolean).join(' · ')].filter(Boolean).join(' — ')
+  const sub = [day ? dayLabel(day.number) : project?.title, [scene.int_ext, scene.period].filter(Boolean).join(' · ')].filter(Boolean).join(' — ')
 
   return (
     <>
-      <TopBar title={`Cena ${scene.number}`} subtitle={sub} back={`/p/${projectId}`}
+      <TopBar title={`Cena ${scene.number}`} subtitle={sub} back={backTo}
         right={canEdit && <IconBtn label="Editar cena" onClick={() => setEditScene(true)}><IconEdit /></IconBtn>} />
       <main className="mx-auto max-w-5xl px-4 pt-4 pb-32">
         {(scene.location || scene.description) && (
@@ -64,12 +72,12 @@ export default function Scene() {
             const last = info?.last
             return (
               <Card key={s.id} className="flex items-stretch">
-                <button className="flex min-h-16 min-w-0 flex-1 items-center gap-3 px-4 py-2 text-left" onClick={() => nav(`/p/${projectId}/s/${sceneId}/sh/${s.id}`)}>
+                <button className="flex min-h-16 min-w-0 flex-1 items-center gap-3 px-4 py-2 text-left" onClick={() => nav(`/p/${projectId}/s/${sceneId}/sh/${s.id}${q}`)}>
                   <div className="min-w-16 shrink-0 font-display text-3xl font-extrabold text-accent">{scene.number}{/^\d/.test(s.code) ? '.' : ''}{s.code}</div>
                   <div className="min-w-0 flex-1">
                     <div className="truncate font-display font-bold">{s.shot_type || 'Plano'}{s.description ? ` — ${s.description}` : ''}</div>
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-xs text-muted">
-                      <span className="whitespace-nowrap">{plural(info?.n || 0, 'take')}</span>
+                      <span className="whitespace-nowrap">{plural(info?.n || 0, 'take')}{day && info?.total > info.n ? ` hoje (${info.total} no total)` : ''}</span>
                       {last && last.rows.some((r) => r.status) && (
                         <span className="flex items-center gap-1 whitespace-nowrap">
                           T{last.number}

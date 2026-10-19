@@ -4,6 +4,7 @@ import { natCompare, fmtDate, fmtTime, joinFilters, plural } from './util'
 import { cameraOrder, projectCameras, takeKey, shotLabel } from './cameras'
 import { EXTRA_FIELDS, extraField, extraText, isEmpty, markCode, markFull, SOUND } from './fields'
 import { photoDataUrl } from './photos'
+import { loadDays, dayLabel } from './days'
 
 const STATUS_TXT = { good: 'GOOD', ng: 'NG', check: 'CHECK' }
 const STATUS_RGB = { good: [34, 197, 94], ng: [239, 68, 68], check: [250, 204, 21] }
@@ -27,8 +28,13 @@ export async function reportData(projectId, date = null) {
     if (leadCode[k] == null || natCompare(sh.code, leadCode[k]) < 0) leadCode[k] = sh.code
   }
   const lead = (t) => leadCode[shots[t.shot_id].link_id || t.shot_id] ?? shots[t.shot_id].code
-  // Ordem de gravação (coluna Hora): diária, depois a hora do take. As câmeras do mesmo take (e os planos
-  // vinculados) ficam juntas, na hora do primeiro registro do grupo. Sem hora: cena/plano/take como desempate.
+  // Ordem de gravação: diária → cena na ordem arrumada na pasta da diária → hora do take. As câmeras do mesmo
+  // take (e os planos vinculados) ficam juntas, na hora do primeiro registro do grupo.
+  const days = await loadDays(projectId)
+  const dayByDate = Object.fromEntries(days.map((d) => [d.date, d]))
+  const rankOf = {}
+  for (const d of days) d.scenes.forEach((x, i) => { rankOf[`${d.date}|${x.scene_id}`] = i })
+  const sceneRank = (t) => rankOf[`${t.shoot_date}|${t.scene_id}`] ?? 9999
   const startOf = {}
   for (const t of takes) {
     const k = key(t)
@@ -37,6 +43,7 @@ export async function reportData(projectId, date = null) {
   }
   takes.sort((a, b) =>
     (date ? 0 : String(a.shoot_date).localeCompare(String(b.shoot_date)))
+    || sceneRank(a) - sceneRank(b)
     || String(startOf[key(a)]).localeCompare(String(startOf[key(b)]))
     || natCompare(scenes[a.scene_id].number, scenes[b.scene_id].number)
     || natCompare(lead(a), lead(b))
@@ -85,6 +92,7 @@ export async function reportData(projectId, date = null) {
     time: fmtTime(t.recorded_at),
     notes: t.notes || '',
     isoDate: t.shoot_date || '',
+    day: dayByDate[t.shoot_date] ? dayLabel(dayByDate[t.shoot_date].number) : '',
     slate: label(t.shot_id),
     sound: SOUND[t.sound] || '',
     circled: !!t.circled,
@@ -121,7 +129,7 @@ export async function reportData(projectId, date = null) {
     mos: rows.filter((r) => r.sound === 'MOS').length,
     photos: rows.reduce((n, r) => n + r.photos.length, 0),
   }
-  return { project, rows, summary, date, fields }
+  return { project, rows, summary, date, fields, dayName: date && dayByDate[date] ? dayLabel(dayByDate[date].number) : null }
 }
 
 // Fonte padrão do PDF só tem Latin-1: troca símbolos que não existem nela
@@ -150,7 +158,7 @@ export async function buildPdf(projectId, date = null) {
   // jsPDF só é carregado aqui (deixa a abertura do app mais leve). O arquivo separado
   // entra no precache do service worker, então funciona offline do mesmo jeito.
   const [{ jsPDF }, { autoTable }] = await Promise.all([import('jspdf'), import('jspdf-autotable')]).catch(staleBuild)
-  const { project, rows, summary, fields } = await reportData(projectId, date)
+  const { project, rows, summary, fields, dayName } = await reportData(projectId, date)
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
   const W = doc.internal.pageSize.getWidth()
   const M = 10
@@ -166,7 +174,7 @@ export async function buildPdf(projectId, date = null) {
   doc.setFontSize(18)
   doc.text(pdfSafe(project.title), M, 17)
   doc.setFontSize(11)
-  doc.text(pdfSafe(date ? `DIÁRIA ${fmtDate(date)}` : 'TODAS AS DIÁRIAS'), W - M, 10, { align: 'right' })
+  doc.text(pdfSafe(date ? `${(dayName || 'DIÁRIA').toUpperCase()} · ${fmtDate(date)}` : 'TODAS AS DIÁRIAS'), W - M, 10, { align: 'right' })
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(9)
   const cams = projectCameras(project)
@@ -358,7 +366,7 @@ async function addPhotoPages(doc, rows, safe) {
 
 export async function buildCsv(projectId, date = null) {
   const { project, rows, fields } = await reportData(projectId, date)
-  const cols = [['date', 'Data'], ['scene', 'Cena'], ['shot', 'Plano'], ['shotType', 'Enquadramento'], ['take', 'Take'],
+  const cols = [['day', 'Diária'], ['date', 'Data'], ['scene', 'Cena'], ['shot', 'Plano'], ['shotType', 'Enquadramento'], ['take', 'Take'],
     ['camera', 'Cam'], ['multicam', 'Multicam'], ['roll', 'Rolo'], ['clip', 'Clipe'], ['lens', 'Lente'], ['tstop', 'T-Stop'], ['filters', 'Filtros'],
     ['focus', 'Foco'], ['iso', 'ISO'], ['shutter', 'Shutter'], ['fps', 'FPS'], ['wb', 'WB'], ['sound', 'Som'], ['circled', 'Circulado'],
     ['marks', 'Marcações'], ['status', 'Status'], ['time', 'Hora'], ...fields.map((f) => [`x:${f.key}`, f.label]), ['notes', 'Notas pós/VFX'],
@@ -469,7 +477,7 @@ export function downloadFile({ blob, filename }) {
 export async function buildBackup() {
   const db = getDb()
   const data = {}
-  for (const t of ['projects', 'scenes', 'shots', 'takes', 'take_photos', 'kit_items']) data[t] = (await db[t].toArray()).filter((r) => !r.deleted)
+  for (const t of ['projects', 'scenes', 'shoot_days', 'day_scenes', 'shots', 'takes', 'take_photos', 'kit_items']) data[t] = (await db[t].toArray()).filter((r) => !r.deleted)
   const blob = new Blob([JSON.stringify({ app: 'boletim-de-camera', version: 2, exported_at: new Date().toISOString(), data }, null, 1)],
     { type: 'application/json' })
   const d = new Date()

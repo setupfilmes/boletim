@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useNavigate, useParams } from 'react-router'
+import { useNavigate, useParams, useSearchParams } from 'react-router'
 import { TopBar, Btn, Empty, Card, Sheet, TextInput, TextArea, IconBtn, useDialog } from '../components/ui'
 import { IconPlus, IconMore, IconEdit, IconTrash, IconBack, IconChevron, IconX } from '../components/icons'
 import PickerSheet from '../components/PickerSheet'
@@ -10,7 +10,8 @@ import { createNextTake, addCameraToTake, deleteTakes, update, updateExtra } fro
 import { projectFields, extraField, extraText, isEmpty, MARKS, SOUND, markCode, formatTc } from '../lib/fields'
 import { groupTakes, isMulticam, projectCameras, cameraOrder, linkedShots, shotCameras, shotLabel } from '../lib/cameras'
 import { useAuth } from '../auth'
-import { fmtDate, fmtTime, joinFilters, vibrate, incrCode } from '../lib/util'
+import { fmtDate, fmtTime, joinFilters, vibrate, incrCode, todayISO } from '../lib/util'
+import { useDays, dayLabel, whenForDay } from '../lib/days'
 import { STATUS, ShotForm } from './Scene'
 
 // Campos do take que abrem a gaveta de presets
@@ -41,7 +42,15 @@ export default function Shot() {
   const shots = useShots(sceneId)
   // planos vinculados (rodam juntos, mesma claquete): a tela mostra os takes de todos eles
   const linked = useMemo(() => (shot && !shot.deleted ? linkedShots(shot, shots) : []), [shot, shots])
-  const takes = useTakesByShots(linked.length ? linked.map((s) => s.id) : [shotId])
+  const allShotTakes = useTakesByShots(linked.length ? linked.map((s) => s.id) : [shotId])
+  // aberta de dentro de uma diária (?dia=): mostra os takes daquele dia; os de outras diárias ficam recolhidos
+  const [params] = useSearchParams()
+  const days = useDays(projectId)
+  const day = days?.find((d) => d.id === params.get('dia')) || null
+  const q = day ? `?dia=${day.id}` : ''
+  const [showAll, setShowAll] = useState(false)
+  const otherDays = day ? (allShotTakes || []).filter((t) => t.shoot_date !== day.date) : []
+  const takes = day && !showAll && allShotTakes ? allShotTakes.filter((t) => t.shoot_date === day.date) : allShotTakes
   const kit = useKit()
   const allTakes = useTakesByProject(projectId) // valores já usados nos campos extras viram opções
   const photos = useTakePhotos((takes || []).map((t) => t.id))
@@ -69,18 +78,19 @@ export default function Shot() {
   useEffect(() => { setOpenNum(latestNum ?? null) }, [latestNum])
 
   if (shot === undefined || scene === undefined) return null
-  if (!shot || shot.deleted) return (<><TopBar title="Plano" back={`/p/${projectId}/s/${sceneId}`} /><Empty title="Plano não encontrado" /></>)
+  if (!shot || shot.deleted) return (<><TopBar title="Plano" back={`/p/${projectId}/s/${sceneId}${q}`} /><Empty title="Plano não encontrado" /></>)
 
-  const nextNumber = groups.length ? groups[0].number + 1 : 1
+  // numeração da claquete continua entre as diárias
+  const nextNumber = (allShotTakes || []).reduce((m, t) => Math.max(m, t.take_number), 0) + 1
   const shotLabel = shotCode(scene, shot)
   const idx = shots ? shots.findIndex((s) => s.id === shot.id) : -1
   const prev = idx > 0 ? shots[idx - 1] : null
   const next = idx >= 0 ? shots[idx + 1] : null
-  const goShot = (s) => nav(`/p/${projectId}/s/${sceneId}/sh/${s.id}`, { replace: true })
+  const goShot = (s) => nav(`/p/${projectId}/s/${sceneId}/sh/${s.id}${q}`, { replace: true })
 
   const addTake = async () => {
     vibrate(25)
-    const rows = await createNextTake(shot, project, linked)
+    const rows = await createNextTake(shot, project, linked, whenForDay(day, todayISO()))
     setOpenNum(rows[0].take_number)
     if (multi && !rows.some((r) => r.camera === camSel)) setCam(rows[0].camera)
     window.scrollTo({ top: 0, behavior: 'smooth' })
@@ -105,8 +115,8 @@ export default function Shot() {
 
   return (
     <>
-      <TopBar title={`Plano ${shotLabel}`} subtitle={`${project?.title || ''} — Cena ${scene?.number || ''}${shot.shot_type ? ` · ${shot.shot_type}` : ''}`}
-        back={`/p/${projectId}/s/${sceneId}`}
+      <TopBar title={`Plano ${shotLabel}`} subtitle={`${day ? dayLabel(day.number) : project?.title || ''} — Cena ${scene?.number || ''}${shot.shot_type ? ` · ${shot.shot_type}` : ''}`}
+        back={`/p/${projectId}/s/${sceneId}${q}`}
         right={canEdit && <IconBtn label="Editar plano" onClick={() => setEditShot(true)}><IconEdit /></IconBtn>} />
       <main className="mx-auto max-w-4xl px-3 pt-3 pb-32">
         {shots && (
@@ -125,9 +135,16 @@ export default function Shot() {
             <span className="w-full font-mono text-xs text-muted">Mesma claquete: + TAKE cria o take em todos os planos vinculados.</span>
           </div>
         )}
+        {day && otherDays.length > 0 && (
+          <button onClick={() => setShowAll(!showAll)} data-testid="other-days"
+            className="mb-3 min-h-10 w-full rounded-xl border-2 border-dashed border-line px-3 font-mono text-xs text-muted">
+            {showAll ? `Mostrar só os takes do ${dayLabel(day.number)}`
+              : `Ver também ${new Set(otherDays.map((t) => t.take_number)).size} takes de outras diárias`}
+          </button>
+        )}
         {takes?.length === 0 && (
           <Empty title="Nenhum take">
-            Toque em <b>+ TAKE 1</b>.{multi ? ` O take é criado para as câmeras ${cams.join(', ')} — cada uma com seus valores e status.` : ''} Os
+            Toque em <b>+ TAKE {nextNumber}</b>.{multi ? ` O take é criado para as câmeras ${cams.join(', ')} — cada uma com seus valores e status.` : ''} Os
             valores de câmera vêm preenchidos do último take registrado no projeto.
           </Empty>
         )}

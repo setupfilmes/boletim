@@ -20,6 +20,11 @@ export function openDb(userId) {
     take_photos: 'id, take_id, project_id, _dirty',
     photo_blobs: 'id, pending',
   })
+  // v3: diárias (pastas por dia de filmagem) e a ordem das cenas em cada uma
+  db.version(3).stores({
+    shoot_days: 'id, project_id, _dirty',
+    day_scenes: 'id, project_id, day_id, scene_id, _dirty',
+  })
   current = { userId, db }
   return db
 }
@@ -52,9 +57,11 @@ export const COLUMNS = {
     'deleted', 'created_at', 'sound', 'circled', 'marks', 'extra'],
   kit_items: ['id', 'owner_id', 'category', 'value', 'sort_order', 'deleted', 'created_at'],
   take_photos: ['id', 'project_id', 'take_id', 'path', 'width', 'height', 'caption', 'created_by', 'deleted', 'created_at'],
+  shoot_days: ['id', 'project_id', 'number', 'date', 'notes', 'created_by', 'deleted', 'created_at'],
+  day_scenes: ['id', 'project_id', 'day_id', 'scene_id', 'sort_order', 'created_by', 'deleted', 'created_at'],
 }
 
-export const TABLES = ['projects', 'kit_items', 'scenes', 'shots', 'takes', 'take_photos'] // ordem de envio: pais antes dos filhos
+export const TABLES = ['projects', 'kit_items', 'scenes', 'shoot_days', 'day_scenes', 'shots', 'takes', 'take_photos'] // ordem de envio: pais antes dos filhos
 
 export async function getMeta(key, fallback = null) {
   const r = await getDb().meta.get(key)

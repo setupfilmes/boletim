@@ -92,6 +92,7 @@ async function push() {
       const chunk = dirty.slice(i, i + 200)
       const payload = chunk.map((r) => pick(r, COLUMNS[table]))
       const { error } = await supabase.from(table).upsert(payload, { onConflict: 'id' })
+      if (missingTable(error)) break // tabela nova ainda não criada no banco: fica pendente até rodar o SQL
       if (!error) {
         await markClean(table, chunk)
         if (table === 'take_photos') await removeDeletedPhotoFiles(chunk)
@@ -116,6 +117,9 @@ async function removeDeletedPhotoFiles(rows) {
   await supabase.storage.from(PHOTO_BUCKET).remove(gone.map((r) => r.path)).catch(() => {})
   await getDb().photo_blobs.bulkDelete(gone.map((r) => r.id))
 }
+
+// Tabela que ainda não existe no servidor (atualização do banco não rodada): não trava o resto da sincronização
+const missingTable = (err) => err && (err.code === 'PGRST205' || err.code === '42P01')
 
 function isNetwork(err) {
   return /fetch|network|Failed to|Load failed/i.test(err?.message || '') && !err?.code
@@ -176,13 +180,13 @@ async function pull() {
   if (!firstSync) {
     for (const p of projects) {
       if (!knownIds.has(p.id) && !p.deleted) {
-        for (const t of ['scenes', 'shots', 'takes', 'take_photos']) await pullAll(t, (q) => q.eq('project_id', p.id))
+        for (const t of ['scenes', 'shoot_days', 'day_scenes', 'shots', 'takes', 'take_photos']) await pullAll(t, (q) => q.eq('project_id', p.id))
       }
     }
   }
 
   // 3) Incremental por tabela
-  for (const t of ['kit_items', 'scenes', 'shots', 'takes', 'take_photos']) {
+  for (const t of ['kit_items', 'scenes', 'shoot_days', 'day_scenes', 'shots', 'takes', 'take_photos']) {
     const cursor = await getMeta(`cursor:${t}`)
     const since = cursor ? new Date(Date.parse(cursor) - OVERLAP_MS).toISOString() : null
     const maxSeen = await pullAll(t, (q) => (since ? q.gt('updated_at', since) : q))
@@ -197,6 +201,7 @@ async function pullAll(table, filter) {
   for (;;) {
     const q = filter(supabase.from(table).select('*')).order('updated_at', { ascending: true }).order('id').range(from, from + PAGE - 1)
     const { data, error } = await q
+    if (missingTable(error)) return maxSeen
     if (error) throw error
     for (const row of data) {
       await applyRow(table, row)
@@ -224,8 +229,10 @@ async function applyRow(table, row) {
 async function removeProjectLocal(id) {
   const db = getDb()
   const photoIds = await db.take_photos.where('project_id').equals(id).primaryKeys()
-  await db.transaction('rw', [db.projects, db.scenes, db.shots, db.takes, db.take_photos, db.photo_blobs], async () => {
+  await db.transaction('rw', [db.projects, db.scenes, db.shoot_days, db.day_scenes, db.shots, db.takes, db.take_photos, db.photo_blobs], async () => {
     await db.photo_blobs.bulkDelete(photoIds)
+    await db.day_scenes.where('project_id').equals(id).delete()
+    await db.shoot_days.where('project_id').equals(id).delete()
     await db.take_photos.where('project_id').equals(id).delete()
     await db.takes.where('project_id').equals(id).delete()
     await db.shots.where('project_id').equals(id).delete()

@@ -1,18 +1,20 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router'
 import { TopBar, Btn, Empty, Card, Sheet, TextInput, TextArea, ChipSelect, Field, IconBtn, useDialog } from '../components/ui'
 import { IconPlus, IconMore, IconEdit, IconTrash, IconChevron } from '../components/icons'
 import { useProject, useScenes, useShotsByProject, useTakesByProject, useRole } from '../lib/hooks'
 import { createScene, createScenesBatch, deleteProject, deleteScene, update } from '../lib/repo'
 import { useAuth } from '../auth'
-import { fmtDate, plural } from '../lib/util'
+import { fmtDate, plural, todayISO } from '../lib/util'
 import { countTakes } from '../lib/cameras'
 import ProjectForm from './ProjectForm'
 import Reports from './Reports'
 import Team from './Team'
+import { DayForm, weekday } from './Day'
+import { useDays, ensureDays, dayLabel } from '../lib/days'
 
 const TABS = [
-  { key: 'cenas', label: 'Cenas' },
+  { key: 'cenas', label: 'Diárias' },
   { key: 'diarias', label: 'Relatórios' },
   { key: 'equipe', label: 'Equipe' },
   { key: 'info', label: 'Info' },
@@ -47,7 +49,8 @@ export default function Project() {
         ))}
       </nav>
       <main className="mx-auto max-w-5xl px-4 pt-4 pb-28">
-        {tab === 'cenas' && <ScenesTab project={project} canEdit={role !== 'viewer'} />}
+        {tab === 'cenas' && <DaysTab project={project} canEdit={role !== 'viewer'} view={params.get('ver') || 'diarias'}
+          onView={(v) => setParams({ tab: 'cenas', ver: v }, { replace: true })} />}
         {tab === 'diarias' && <Reports project={project} />}
         {tab === 'equipe' && <Team project={project} role={role} />}
         {tab === 'info' && <InfoTab project={project} role={role} onDeleted={() => nav('/')} />}
@@ -56,8 +59,87 @@ export default function Project() {
   )
 }
 
+// Aba Diárias: pastas Dia 01, Dia 02… (cenas na ordem de gravação) e o Roteiro com todas as cenas
+function DaysTab({ project, canEdit, view, onView }) {
+  // diárias que surgiram de takes gravados viram linhas de verdade (para poder reordenar e sincronizar)
+  useEffect(() => { if (canEdit) ensureDays(project.id) }, [project.id, canEdit])
+  const seg = (v, label) => (
+    <button onClick={() => onView(v)} data-testid={`ver-${v}`}
+      className={`min-h-11 rounded-lg font-display text-sm font-bold uppercase tracking-wide ${view === v ? 'bg-accent text-accent-ink' : 'text-muted'}`}>{label}</button>
+  )
+  return (
+    <>
+      <div className="mb-4 grid grid-cols-2 gap-1 rounded-xl border-2 border-line p-1">
+        {seg('diarias', 'Diárias')}{seg('roteiro', 'Roteiro')}
+      </div>
+      {view === 'roteiro' ? <ScenesTab project={project} canEdit={canEdit} /> : <DaysList project={project} canEdit={canEdit} />}
+    </>
+  )
+}
+
+function DaysList({ project, canEdit }) {
+  const days = useDays(project.id)
+  const scenes = useScenes(project.id)
+  const shots = useShotsByProject(project.id)
+  const takes = useTakesByProject(project.id)
+  const nav = useNavigate()
+  const { confirm } = useDialog()
+  const [form, setForm] = useState(false)
+  const stats = useMemo(() => {
+    const shotsById = Object.fromEntries((shots || []).map((s) => [s.id, s]))
+    const byDate = {}
+    for (const t of takes || []) (byDate[t.shoot_date] ||= []).push(t)
+    return Object.fromEntries(Object.entries(byDate).map(([d, list]) => [d, countTakes(list, shotsById)]))
+  }, [takes, shots])
+  if (!days || !scenes) return null
+  const sceneNum = Object.fromEntries(scenes.map((s) => [s.id, s.number]))
+  const today = todayISO()
+  return (
+    <>
+      {days.length === 0 && (
+        <Empty title="Nenhuma diária ainda">
+          Crie o Dia 01 e escolha as cenas da ordem do dia. Se você gravar sem criar, a diária aparece sozinha com a data do take.
+        </Empty>
+      )}
+      <div className="grid grid-cols-1 gap-2 md:grid-cols-2" data-testid="days">
+        {days.map((d) => {
+          const st = stats[d.date]
+          const nums = d.scenes.map((x) => sceneNum[x.scene_id]).filter(Boolean)
+          return (
+            <Card key={d.id} className="active:border-accent">
+              <button className="flex w-full items-center gap-3 p-4 text-left" onClick={() => nav(`/p/${project.id}/d/${d.id}`)}>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-baseline gap-2">
+                    <span className="font-display text-2xl font-extrabold text-accent">{dayLabel(d.number)}</span>
+                    <span className="font-display text-lg font-bold">{fmtDate(d.date)}</span>
+                    {d.date === today && <span className="rounded border border-accent px-1 text-xs font-bold text-accent">HOJE</span>}
+                  </div>
+                  <div className="truncate text-sm capitalize text-muted">{weekday(d.date)}</div>
+                  <div className="mt-1 truncate font-mono text-xs text-muted">
+                    {nums.length ? `Cenas ${nums.join(' → ')}` : 'sem cenas'}{st ? ` · ${plural(st.takes, 'take')} · ${st.good} good` : ''}
+                  </div>
+                </div>
+                <IconChevron className="text-muted" />
+              </button>
+            </Card>
+          )
+        })}
+      </div>
+      {canEdit && (
+        <div className="fixed inset-x-0 bottom-0 z-20 mx-auto max-w-xl bg-gradient-to-t from-bg via-bg to-transparent px-4 pt-6 pb-bar">
+          <Btn full size="lg" onClick={() => setForm(true)} data-testid="new-day"><IconPlus /> Diária</Btn>
+        </div>
+      )}
+      <DayForm open={form} onClose={() => setForm(false)} project={project} days={days} confirm={confirm}
+        onCreated={(d) => nav(`/p/${project.id}/d/${d.id}`)} />
+    </>
+  )
+}
+
 function ScenesTab({ project, canEdit }) {
   const scenes = useScenes(project.id)
+  const days = useDays(project.id)
+  const daysOf = (sid) => (days || []).filter((d) => d.scenes.some((x) => x.scene_id === sid)).map((d) => dayLabel(d.number))
   const shots = useShotsByProject(project.id)
   const takes = useTakesByProject(project.id)
   const nav = useNavigate()
@@ -95,6 +177,7 @@ function ScenesTab({ project, canEdit }) {
                   <div className="truncate font-mono text-xs text-muted">
                     {plural(c.shots, 'plano')} · {plural(c.takes, 'take')}{c.good ? ` · ${c.good} good` : ''}{s.description ? ` · ${s.description}` : ''}
                   </div>
+                  <div className="truncate font-mono text-xs text-accent">{daysOf(s.id).join(' · ') || <span className="text-muted/70">sem diária</span>}</div>
                 </div>
                 <IconChevron className="text-muted" />
               </button>

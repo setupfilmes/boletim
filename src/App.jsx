@@ -9,6 +9,7 @@ import Login, { NewPassword } from './screens/Login'
 import Projects from './screens/Projects'
 import Project from './screens/Project'
 import Scene from './screens/Scene'
+import Day from './screens/Day'
 import Shot from './screens/Shot'
 import Kit from './screens/Kit'
 import Account from './screens/Account'
@@ -43,6 +44,7 @@ function Gate() {
       <Routes>
         <Route path="/" element={<Projects />} />
         <Route path="/p/:projectId" element={<Project />} />
+        <Route path="/p/:projectId/d/:dayId" element={<Day />} />
         <Route path="/p/:projectId/s/:sceneId" element={<Scene />} />
         <Route path="/p/:projectId/s/:sceneId/sh/:shotId" element={<Shot />} />
         <Route path="/kit" element={<Kit />} />
