@@ -43,7 +43,7 @@ export default function Project() {
       <nav className="sticky top-16 z-20 grid grid-cols-4 border-b border-line bg-bg" style={{ top: 'calc(4rem + env(safe-area-inset-top))' }}>
         {TABS.map((t) => (
           <button key={t.key} onClick={() => setParams({ tab: t.key }, { replace: true })}
-            className={`min-h-12 border-b-4 font-display text-sm font-bold uppercase tracking-wide ${tab === t.key ? 'border-accent text-accent' : 'border-transparent text-muted'}`}>
+            className={`min-h-12 border-b-4 font-display text-xs font-bold uppercase sm:text-sm sm:tracking-wide ${tab === t.key ? 'border-accent text-accent' : 'border-transparent text-muted'}`}>
             {t.label}
           </button>
         ))}
@@ -72,12 +72,12 @@ function DaysTab({ project, canEdit, view, onView }) {
       <div className="mb-4 grid grid-cols-2 gap-1 rounded-xl border-2 border-line p-1">
         {seg('diarias', 'Diárias')}{seg('roteiro', 'Roteiro')}
       </div>
-      {view === 'roteiro' ? <ScenesTab project={project} canEdit={canEdit} /> : <DaysList project={project} canEdit={canEdit} />}
+      {view === 'roteiro' ? <ScenesTab project={project} canEdit={canEdit} /> : <DaysList project={project} canEdit={canEdit} onView={onView} />}
     </>
   )
 }
 
-function DaysList({ project, canEdit }) {
+function DaysList({ project, canEdit, onView }) {
   const days = useDays(project.id)
   const scenes = useScenes(project.id)
   const shots = useShotsByProject(project.id)
@@ -94,9 +94,12 @@ function DaysList({ project, canEdit }) {
   if (!days || !scenes) return null
   const sceneNum = Object.fromEntries(scenes.map((s) => [s.id, s.number]))
   const today = todayISO()
+  // cenas que ainda não estão em nenhuma diária (criadas e ainda não gravadas): ficam à mão aqui também
+  const scheduled = new Set(days.flatMap((d) => d.scenes.map((x) => x.scene_id)))
+  const loose = scenes.filter((s) => !scheduled.has(s.id))
   return (
     <>
-      {days.length === 0 && (
+      {days.length === 0 && !loose.length && (
         <Empty title="Nenhuma diária ainda">
           Crie o Dia 01 e escolha as cenas da ordem do dia. Se você gravar sem criar, a diária aparece sozinha com a data do take.
         </Empty>
@@ -125,6 +128,21 @@ function DaysList({ project, canEdit }) {
           )
         })}
       </div>
+      {loose.length > 0 && (
+        <Card className="mt-3 p-4" data-testid="loose-scenes">
+          <div className="text-xs uppercase tracking-widest text-check">Cenas sem diária ({loose.length})</div>
+          <p className="mt-1 text-sm text-muted">Ainda não gravadas nem colocadas em um dia. Toque para abrir; para planejar, crie a diária e use “+ Cena”.</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {loose.map((s) => (
+              <button key={s.id} onClick={() => nav(`/p/${project.id}/s/${s.id}`)}
+                className="min-h-11 min-w-11 rounded-lg border-2 border-line bg-surface2 px-3 font-display text-lg font-extrabold text-accent active:border-accent">
+                {s.number}
+              </button>
+            ))}
+          </div>
+          <Btn size="sm" variant="ghost" full className="mt-3" onClick={() => onView('roteiro')}>Ver o roteiro completo</Btn>
+        </Card>
+      )}
       {canEdit && (
         <div className="fixed inset-x-0 bottom-0 z-20 mx-auto max-w-xl bg-gradient-to-t from-bg via-bg to-transparent px-4 pt-6 pb-bar">
           <Btn full size="lg" onClick={() => setForm(true)} data-testid="new-day"><IconPlus /> Diária</Btn>

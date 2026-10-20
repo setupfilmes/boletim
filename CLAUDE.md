@@ -177,6 +177,8 @@ a versão do Dexie em `openDb()` (`db.version(2).stores(...)` — nunca editar a
   a mesma linha. Cena com takes no dia não sai da pasta. Mudar a data da diária leva os takes junto. Cena/plano
   abertos de uma diária levam `?dia=`: plano mostra só os takes do dia (botão para ver os outros), numeração
   continua, take novo usa a data da diária (`whenForDay`). Sync ignora tabela ausente (PGRST205) sem travar.
+  Cenas sem diária (criadas e não gravadas) aparecem no card "Cenas sem diária" da lista de Diárias — antes só no
+  Roteiro e a equipe achou que tinham sumido (20/10/2026).
 - Relatórios (PDF/Planilha/DIT/ALE) em **ordem de gravação**: diária → cena na ordem da pasta da diária → hora do 1º registro do grupo do take
   (`startOf[takeKey]`); câmeras do mesmo take e planos vinculados juntos.
 - `.github/workflows/keepalive.yml`: **todo dia** (08:17 BRT) chama `rpc/heartbeat` (grava/atualiza uma linha em
