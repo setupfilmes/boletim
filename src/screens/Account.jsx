@@ -11,6 +11,7 @@ import { configSource, clearDeviceConfig } from '../lib/supabase'
 import { fmtDate, fmtTime } from '../lib/util'
 import { useTheme } from '../theme'
 import Login from './Login'
+import { checkLatest, hardUpdate } from '../lib/appUpdate'
 
 export default function Account() {
   const auth = useAuth()
@@ -22,6 +23,24 @@ export default function Account() {
   const nav = useNavigate()
   const [relogin, setRelogin] = useState(false)
   const [name, setName] = useState(user?.name || '')
+  const [updating, setUpdating] = useState(false)
+
+  const updateApp = async () => {
+    if (!navigator.onLine) return notify('Sem internet. Para atualizar o app é preciso estar conectado.', 'error')
+    setUpdating(true)
+    try {
+      if (sessionOk) await syncNow().catch(() => {}) // manda o que estiver pendente antes
+      const v = await checkLatest()
+      if (v.upToDate && !(await confirm({ title: 'Atualizar o app', confirmLabel: 'Recarregar mesmo assim',
+        message: 'Você já está na versão mais recente. Quer recarregar o app do zero mesmo assim? Seus dados continuam no aparelho.' }))) return
+      notify('Atualizando o app…')
+      await hardUpdate()
+    } catch (e) {
+      notify(/fetch|network|Failed/i.test(e.message) ? 'Sem conexão com o servidor. Tente de novo com internet.' : `Não foi possível atualizar: ${e.message}`, 'error')
+    } finally {
+      setUpdating(false)
+    }
+  }
   useEffect(() => { if (sessionOk) setRelogin(false) }, [sessionOk])
 
   const status = !sessionOk ? 'Sessão expirada — os dados continuam salvos no aparelho'
@@ -81,6 +100,18 @@ export default function Account() {
             notify('Projeto de demonstração criado')
             nav(`/p/${p.id}?tab=diarias`)
           }}>Criar projeto de demonstração</Btn>
+        </Card>
+
+        <Card className="p-4">
+          <div className="mb-3 text-xs uppercase tracking-widest text-muted">Atualização do app</div>
+          <Btn variant="surface" full onClick={updateApp} disabled={updating} data-testid="update-app">
+            <IconSync size={18} /> {updating ? 'Atualizando…' : 'Atualizar o app'}
+          </Btn>
+          <p className="mt-2 text-xs text-muted">
+            Baixa a versão mais nova do app (use se algo parecer desatualizado ou travado). Envia antes o que estiver
+            pendente; projetos, takes e fotos continuam no aparelho. Precisa de internet.
+            Versão em uso: {__APP_BUILD__.slice(8, 10)}/{__APP_BUILD__.slice(5, 7)} {__APP_BUILD__.slice(11)}.
+          </p>
         </Card>
 
         <Btn variant="ghost" className="text-ng" onClick={async () => {
