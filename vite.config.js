@@ -7,7 +7,11 @@ import pkg from './package.json' with { type: 'json' }
 
 export default defineConfig({
   base: './',
-  define: { __APP_VERSION__: JSON.stringify(pkg.version) },
+  // __APP_BUILD__ = data/hora da publicação (horário de Brasília): mostra na tela Conta qual versão o aparelho está rodando
+  define: {
+    __APP_VERSION__: JSON.stringify(pkg.version),
+    __APP_BUILD__: JSON.stringify(new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 16).replace('T', ' ')),
+  },
   plugins: [
     react(),
     tailwindcss(),

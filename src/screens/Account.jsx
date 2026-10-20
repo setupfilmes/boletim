@@ -95,7 +95,7 @@ export default function Account() {
             Apagar configuração do banco salva neste aparelho
           </button>
         )}
-        <div className="text-center font-mono text-xs text-muted">Boletim de Câmera v{__APP_VERSION__}</div>
+        <div className="text-center font-mono text-xs text-muted">Boletim de Câmera v{__APP_VERSION__} · versão de {__APP_BUILD__.slice(8, 10)}/{__APP_BUILD__.slice(5, 7)} {__APP_BUILD__.slice(11)}</div>
       </main>
       <Sheet open={relogin} onClose={() => setRelogin(false)} title="Entrar">
         <Login embedded />
