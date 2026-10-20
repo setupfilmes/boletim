@@ -163,6 +163,12 @@ a versão do Dexie em `openDb()` (`db.version(2).stores(...)` — nunca editar a
 
 ## Operação
 
+- Convite por link/WhatsApp (`lib/inviteLink.js`, `components/InviteAcceptor.jsx`, SQL
+  `atualizacao-2026-10-20-convite-link.sql`): dono gera `create_invite_link` (token 32 hex, 1 pessoa, 7 dias,
+  cancelável) e envia por wa.me / compartilhar / copiar. Link `#/convite/<token>`: `captureInviteFromUrl()` (main.jsx,
+  antes do login) guarda em localStorage `boletim.pendingInvite`; o Login mostra aviso (abre em "criar conta" se não
+  há conta no aparelho); logado com sessão, `accept_invite_link` entra no projeto, sincroniza e abre. Se a pessoa
+  confirmar o e-mail em outro navegador, o convite fica no aparelho onde abriu o link (pedir para abrir de novo).
 - Compartilhamento (`Team.jsx`, SQL `atualizacao-2026-10-19-convites.sql`): `share_project` → 'added' (conta existe)
   ou 'invited' (guarda em `project_invites`; o gatilho `claim_invites_on_signup` em `auth.users` transforma em
   membro quando o e-mail é confirmado; o app também chama `claim_my_invites` 1x por sessão). Aviso: `project_members`

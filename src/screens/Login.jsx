@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useAuth, recentAccounts, forgetAccount } from '../auth'
 import { Btn, TextInput } from '../components/ui'
 import { IconUser, IconX } from '../components/icons'
+import { getPendingInvite } from '../lib/inviteLink'
 
 const errPt = (e) => {
   const m = e?.message || String(e)
@@ -15,8 +16,9 @@ const errPt = (e) => {
 
 export default function Login({ embedded }) {
   const auth = useAuth()
-  const [mode, setMode] = useState('login') // login | signup | reset
   const [recent, setRecent] = useState(recentAccounts())
+  // convidado sem conta neste aparelho: já abre em "criar conta"
+  const [mode, setMode] = useState(getPendingInvite() && !recent.length ? 'signup' : 'login') // login | signup | reset
   const [email, setEmail] = useState(recent[0]?.email || '')
   const [name, setName] = useState('')
   const [password, setPassword] = useState('')
@@ -51,6 +53,12 @@ export default function Login({ embedded }) {
         </div>
       )}
 
+      {getPendingInvite() && (
+        <div className="mb-5 rounded-xl border-2 border-accent p-3 text-sm" data-testid="invite-banner">
+          <b className="text-accent">Você recebeu um convite para um projeto.</b> Entre na sua conta ou crie uma —
+          o projeto abre automaticamente depois.
+        </div>
+      )}
       {mode === 'login' && recent.length > 0 && (
         <div className="mb-5">
           <div className="mb-2 text-xs uppercase tracking-widest text-muted">Contas neste aparelho</div>

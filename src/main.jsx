@@ -2,6 +2,10 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App'
+import { captureInviteFromUrl } from './lib/inviteLink'
+
+// link de convite (…#/convite/<token>): guarda antes do login para aceitar depois
+captureInviteFromUrl()
 
 // Pede ao navegador para não apagar os dados locais quando faltar espaço
 navigator.storage?.persist?.().catch(() => {})

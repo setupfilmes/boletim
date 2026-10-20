@@ -15,6 +15,7 @@ import Kit from './screens/Kit'
 import Account from './screens/Account'
 import ShareWatcher from './components/ShareWatcher'
 import ErrorBoundary from './components/ErrorBoundary'
+import InviteAcceptor from './components/InviteAcceptor'
 
 function BottomNav() {
   const { pathname } = useLocation()
@@ -62,6 +63,7 @@ function Gate() {
       </SafeRoutes>
       <BottomNav />
       <ShareWatcher />
+      <InviteAcceptor />
     </HashRouter>
   )
 }
