@@ -179,6 +179,10 @@ a versão do Dexie em `openDb()` (`db.version(2).stores(...)` — nunca editar a
   continua, take novo usa a data da diária (`whenForDay`). Sync ignora tabela ausente (PGRST205) sem travar.
   Cenas sem diária (criadas e não gravadas) aparecem no card "Cenas sem diária" da lista de Diárias — antes só no
   Roteiro e a equipe achou que tinham sumido (20/10/2026).
+- Atualização do app: `main.jsx` recarrega a página quando o service worker novo assume (`controllerchange`), só se
+  não houver campo focado/janela aberta (senão espera o app voltar à tela); procura versão nova ao voltar à tela e a
+  cada 30 min. Antes, a aba seguia na versão antiga (com bug já corrigido) até ser fechada. Telas protegidas por
+  `ErrorBoundary` (`SafeRoutes` em App.jsx): erro mostra mensagem + Voltar, nunca tela preta.
 - Relatórios (PDF/Planilha/DIT/ALE) em **ordem de gravação**: diária → cena na ordem da pasta da diária → hora do 1º registro do grupo do take
   (`startOf[takeKey]`); câmeras do mesmo take e planos vinculados juntos.
 - `.github/workflows/keepalive.yml`: **todo dia** (08:17 BRT) chama `rpc/heartbeat` (grava/atualiza uma linha em

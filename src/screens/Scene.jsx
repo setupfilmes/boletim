@@ -119,7 +119,7 @@ export default function Scene() {
         </div>
       )}
       <ShotForm open={!!form} shot={form === 'new' ? null : form} scene={scene} shots={shots || []} project={project}
-        onClose={() => setForm(null)} onCreated={(s) => nav(`/p/${projectId}/s/${sceneId}/sh/${s.id}`)} />
+        onClose={() => setForm(null)} onCreated={(s) => nav(`/p/${projectId}/s/${sceneId}/sh/${s.id}${q}`)} />
       <SceneForm open={editScene} onClose={() => setEditScene(false)} scene={scene} project={project} scenes={scenes} />
     </>
   )
