@@ -77,7 +77,7 @@ export default function Scene() {
                   <div className="min-w-0 flex-1">
                     <div className="truncate font-display font-bold">{s.shot_type || 'Plano'}{s.description ? ` — ${s.description}` : ''}</div>
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-xs text-muted">
-                      <span className="whitespace-nowrap">{plural(info?.n || 0, 'take')}{day && info?.total > info.n ? ` hoje (${info.total} no total)` : ''}</span>
+                      <span className="whitespace-nowrap">{plural(info?.n || 0, 'take')}{day && info && info.total > info.n ? ` hoje (${info.total} no total)` : ''}</span>
                       {last && last.rows.some((r) => r.status) && (
                         <span className="flex items-center gap-1 whitespace-nowrap">
                           T{last.number}

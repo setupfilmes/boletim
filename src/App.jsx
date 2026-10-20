@@ -14,6 +14,7 @@ import Shot from './screens/Shot'
 import Kit from './screens/Kit'
 import Account from './screens/Account'
 import ShareWatcher from './components/ShareWatcher'
+import ErrorBoundary from './components/ErrorBoundary'
 
 function BottomNav() {
   const { pathname } = useLocation()
@@ -33,6 +34,12 @@ function BottomNav() {
   )
 }
 
+// Erro numa tela não derruba o app: some ao trocar de tela
+function SafeRoutes({ children }) {
+  const { pathname, search } = useLocation()
+  return <ErrorBoundary resetKey={pathname + search}>{children}</ErrorBoundary>
+}
+
 function Gate() {
   const { loading, user, recovery } = useAuth()
   if (!supabase) return <Setup />
@@ -41,6 +48,7 @@ function Gate() {
   if (!user) return <Login />
   return (
     <HashRouter>
+      <SafeRoutes>
       <Routes>
         <Route path="/" element={<Projects />} />
         <Route path="/p/:projectId" element={<Project />} />
@@ -51,6 +59,7 @@ function Gate() {
         <Route path="/conta" element={<Account />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      </SafeRoutes>
       <BottomNav />
       <ShareWatcher />
     </HashRouter>
