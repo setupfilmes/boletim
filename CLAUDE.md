@@ -183,6 +183,9 @@ a versão do Dexie em `openDb()` (`db.version(2).stores(...)` — nunca editar a
   não houver campo focado/janela aberta (senão espera o app voltar à tela); procura versão nova ao voltar à tela e a
   cada 30 min. Antes, a aba seguia na versão antiga (com bug já corrigido) até ser fechada. Telas protegidas por
   `ErrorBoundary` (`SafeRoutes` em App.jsx): erro mostra mensagem + Voltar, nunca tela preta.
+- `__APP_BUILD__` (vite.config.js) = data/hora da publicação, mostrada em Conta ("versão de 20/10 14:56"). Por
+  isso o hash do `index-*.js` do GitHub difere do build local: para conferir o deploy, procure no JS publicado
+  o texto novo (ex.: `curl …/assets/index-*.js | grep`), não compare nomes de arquivo.
 - Relatórios (PDF/Planilha/DIT/ALE) em **ordem de gravação**: diária → cena na ordem da pasta da diária → hora do 1º registro do grupo do take
   (`startOf[takeKey]`); câmeras do mesmo take e planos vinculados juntos.
 - `.github/workflows/keepalive.yml`: **todo dia** (08:17 BRT) chama `rpc/heartbeat` (grava/atualiza uma linha em
