@@ -16,6 +16,7 @@ import Account from './screens/Account'
 import ShareWatcher from './components/ShareWatcher'
 import ErrorBoundary from './components/ErrorBoundary'
 import InviteAcceptor from './components/InviteAcceptor'
+import EnvBanner from './components/EnvBanner'
 
 function BottomNav() {
   const { pathname } = useLocation()
@@ -71,6 +72,7 @@ function Gate() {
 export default function App() {
   return (
     <ThemeProvider>
+      <EnvBanner />
       <DialogProvider>
         <AuthProvider>
           <Gate />

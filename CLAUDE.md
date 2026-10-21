@@ -282,3 +282,18 @@ a demonstração "Noite Adentro", `src/lib/demo.js`). Reescrever esses passos an
 - Relatório por cartão/rolo para o DIT.
 - Resolver conflitos com merge por campo (hoje: último envio vence por linha).
 - Validar CSV DIT/ALE com Silverstack/Resolve reais e ajustar colunas.
+
+## Ambientes (desde 20/10/2026)
+
+- **Produção** = ramo `main` → GitHub Actions → GitHub Pages (https://setupfilmes.github.io/boletim/). É o app da
+  equipe no dia a dia: só entra o que já foi testado e aprovado pelo Antonio.
+- **Teste** = ramo `dev` → Cloudflare Pages (projeto `boletim-dev`, https://boletim-dev.pages.dev), build com
+  `APP_ENV=test`: faixa "AMBIENTE DE TESTE" (`EnvBanner`), ícone/manifest "Boletim TESTE". Domínio próprio de
+  propósito: no mesmo `github.io` o navegador misturaria os dados guardados (IndexedDB/localStorage) dos dois.
+- Os dois usam o MESMO Supabase (produção) — testar com contas de teste. Mudança de banco: criar Supabase de teste
+  antes (plano grátis: 2 projetos por organização).
+- Fluxo: trabalho novo (ex.: redesign do Claude Design) no `dev` → Antonio testa no endereço de teste → merge
+  `dev` → `main`. Correção urgente: direto no `main` e depois `git merge main` no `dev`.
+- Cloudflare Pages: produção do projeto = ramo `dev`; build `npm run build`; saída `dist`; variáveis `APP_ENV=test`,
+  `NODE_VERSION=22`. Supabase Auth → Redirect URLs precisa ter `https://boletim-dev.pages.dev/**` (confirmação de
+  e-mail e nova senha voltam para o ambiente onde foram pedidas: `emailRedirectTo`/`redirectTo` = origem atual).

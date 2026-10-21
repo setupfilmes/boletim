@@ -111,7 +111,8 @@ export function AuthProvider({ children }) {
     },
     async signUp(name, email, password) {
       const { data, error } = await supabase.auth.signUp({
-        email: email.trim(), password, options: { data: { full_name: name.trim() } },
+        // o link de confirmação volta para o ambiente onde a conta foi criada (produção ou teste)
+        email: email.trim(), password, options: { data: { full_name: name.trim() }, emailRedirectTo: window.location.origin + window.location.pathname },
       })
       if (error) throw error
       return { needsConfirm: !data.session }

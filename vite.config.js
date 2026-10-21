@@ -5,11 +5,15 @@ import { VitePWA } from 'vite-plugin-pwa'
 
 import pkg from './package.json' with { type: 'json' }
 
+// Ambiente: produção (GitHub Pages, ramo main) ou teste (Cloudflare Pages, ramo dev, com APP_ENV=test no build)
+const TEST = process.env.APP_ENV === 'test'
+
 export default defineConfig({
   base: './',
   // __APP_BUILD__ = data/hora da publicação (horário de Brasília): mostra na tela Conta qual versão o aparelho está rodando
   define: {
     __APP_VERSION__: JSON.stringify(pkg.version),
+    __APP_ENV__: JSON.stringify(TEST ? 'test' : 'prod'),
     __APP_BUILD__: JSON.stringify(new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 16).replace('T', ' ')),
   },
   plugins: [
@@ -19,8 +23,8 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
       manifest: {
-        name: 'Boletim de Câmera',
-        short_name: 'Boletim',
+        name: TEST ? 'Boletim de Câmera (TESTE)' : 'Boletim de Câmera',
+        short_name: TEST ? 'Boletim TESTE' : 'Boletim',
         description: 'Boletim de câmera para 1º AC — offline, com sincronização.',
         lang: 'pt-BR',
         start_url: './',
