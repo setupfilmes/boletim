@@ -10,6 +10,7 @@ import Projects from './screens/Projects'
 import Project from './screens/Project'
 import Scene from './screens/Scene'
 import Day from './screens/Day'
+import { FichaPage, EquipePage } from './screens/ProjectPages'
 import Shot from './screens/Shot'
 import Kit from './screens/Kit'
 import Account from './screens/Account'
@@ -55,6 +56,8 @@ function Gate() {
         <Route path="/" element={<Projects />} />
         <Route path="/p/:projectId" element={<Project />} />
         <Route path="/p/:projectId/d/:dayId" element={<Day />} />
+        <Route path="/p/:projectId/ficha" element={<FichaPage />} />
+        <Route path="/p/:projectId/equipe" element={<EquipePage />} />
         <Route path="/p/:projectId/s/:sceneId" element={<Scene />} />
         <Route path="/p/:projectId/s/:sceneId/sh/:shotId" element={<Shot />} />
         <Route path="/kit" element={<Kit />} />

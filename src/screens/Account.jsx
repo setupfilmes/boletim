@@ -95,7 +95,7 @@ export default function Account() {
               message: 'Cria o projeto fictício “Noite Adentro” com 5 diárias preenchidas (1 a 3 câmeras, planos vinculados, fotos de referência) para ver o app e os relatórios. Pode excluir depois em Info → Excluir projeto.' }))) return
             const p = await createDemoProject(user?.name)
             notify('Projeto de demonstração criado')
-            nav(`/p/${p.id}?tab=diarias`)
+            nav(`/p/${p.id}`)
           }}>Criar projeto de demonstração</Btn>
         </Card>
 

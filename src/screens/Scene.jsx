@@ -5,7 +5,9 @@ import { IconPlus, IconMore, IconEdit, IconTrash, IconChevron } from '../compone
 import { useProject, useScene, useShots, useTakesByProject, useRole, useScenes } from '../lib/hooks'
 import { createShot, deleteShot, update } from '../lib/repo'
 import { useAuth } from '../auth'
-import { nextCode, plural, uuid } from '../lib/util'
+import { nextCode, plural, uuid, fmtDate, todayISO } from '../lib/util'
+import { getDb } from '../lib/db'
+import { Button, PlanoCard, Tag, EmptyState } from '../ds/components'
 import { groupTakes, isMulticam, projectCameras, linkedShots, shotCameras, shotLabel } from '../lib/cameras'
 import { SceneForm } from './Project'
 import { useDays, dayLabel } from '../lib/days'
@@ -28,7 +30,6 @@ export default function Scene() {
   const { user } = useAuth()
   const canEdit = useRole(project, user?.id) !== 'viewer'
   const nav = useNavigate()
-  const { actionSheet, confirm, notify } = useDialog()
   const [form, setForm] = useState(null)
   const [editScene, setEditScene] = useState(false)
   // aberta de dentro de uma diária (?dia=): mostra o que foi gravado naquele dia e cria takes com a data dela
@@ -36,98 +37,97 @@ export default function Scene() {
   const days = useDays(projectId)
   const day = days?.find((d) => d.id === params.get('dia')) || null
   const q = day ? `?dia=${day.id}` : ''
-  const backTo = day ? `/p/${projectId}/d/${day.id}` : `/p/${projectId}?tab=cenas&ver=roteiro`
+  const backTo = day ? (day.date === todayISO() ? `/p/${projectId}?tab=hoje` : `/p/${projectId}/d/${day.id}`) : `/p/${projectId}?tab=roteiro`
+  const multi = isMulticam(project)
 
-  // Por plano: nº de takes (claquete), último take (todas as câmeras) e câmeras que rodaram juntas
+  // Por plano (planos vinculados juntos): grupos de take (claquete), próximo número e câmeras usadas
   const byShot = useMemo(() => {
-    const rows = {}
-    for (const t of takes || []) if (t.scene_id === sceneId) (rows[t.shot_id] ||= []).push(t)
     const m = {}
-    for (const [id, all] of Object.entries(rows)) {
-      const list = day ? all.filter((t) => t.shoot_date === day.date) : all
+    if (!shots) return m
+    for (const s of shots) {
+      const ids = new Set(linkedShots(s, shots).map((x) => x.id))
+      const all = (takes || []).filter((t) => ids.has(t.shot_id))
+      const mine = all.filter((t) => t.shot_id === s.id)
+      const list = day ? mine.filter((t) => t.shoot_date === day.date) : mine
       const groups = groupTakes(list, project)
-      const multi = new Set(groups.filter((g) => g.rows.length > 1).flatMap((g) => g.rows.map((r) => r.camera)))
-      m[id] = { n: groups.length, total: groupTakes(all, project).length, last: groups[0], multicam: [...multi].sort().join('+') }
+      const used = [...new Set(mine.map((t) => t.camera).filter(Boolean))].sort()
+      m[s.id] = { groups, proximo: all.reduce((n, t) => Math.max(n, t.take_number), 0) + 1, used }
     }
     return m
-  }, [takes, sceneId, project, day])
+  }, [takes, shots, project, day])
 
   if (scene === undefined || project === undefined) return null
   if (!scene || scene.deleted) return (<><TopBar title="Cena" back={backTo} /><Empty title="Cena não encontrada" /></>)
 
-  const sub = [day ? dayLabel(day.number) : project?.title, [scene.int_ext, scene.period].filter(Boolean).join(' · ')].filter(Boolean).join(' — ')
+  const openShot = (s, extra = '') => nav(`/p/${projectId}/s/${sceneId}/sh/${s.id}${q}${extra ? (q ? '&' : '?') + extra : ''}`)
+  const chipsOf = (info) => {
+    const out = []
+    for (const g of info.groups.slice(0, multi ? 3 : 6)) {
+      for (const r of g.rows) {
+        out.push({ take: g.number, status: r.status ? r.status.toUpperCase() : null, circulado: !!r.circled,
+          cam: g.rows.length > 1 || multi ? r.camera || undefined : undefined, onPress: () => openShot(shots.find((x) => x.id === r.shot_id) || scene, `take=${g.number}`) })
+      }
+    }
+    return out.reverse()
+  }
 
   return (
     <>
-      <TopBar title={`Cena ${scene.number}`} subtitle={sub} back={backTo}
-        right={canEdit && <IconBtn label="Editar cena" onClick={() => setEditScene(true)}><IconEdit /></IconBtn>} />
-      <main className="mx-auto max-w-5xl px-4 pt-4 pb-32">
-        {(scene.location || scene.description) && (
-          <div className="mb-4 text-sm text-muted">{scene.location}{scene.location && scene.description ? ' — ' : ''}{scene.description}</div>
+      <TopBar title={`Cena ${scene.number}`} subtitle={day ? `${dayLabel(day.number)} · ${fmtDate(day.date)}` : project?.title} back={backTo} />
+      <main className="mx-auto max-w-3xl px-4 pt-4 pb-28">
+        <div className="mb-2 flex flex-wrap items-center gap-2">
+          {scene.int_ext && <Tag>{scene.int_ext}</Tag>}
+          {scene.period && <Tag icon={scene.period === 'NOITE' ? 'moon' : 'sun'}>{scene.period}</Tag>}
+          <span className="flex-1" />
+          {canEdit && <Button size="p" icon="pencil" onClick={() => setEditScene(true)} data-testid="edit-scene">Editar cena</Button>}
+        </div>
+        {scene.location && <div className="text-xl font-bold leading-[26px]">{scene.location}</div>}
+        {scene.description && <p className="mt-1 text-[17px] leading-6 text-muted">{scene.description}</p>}
+        <div className="mt-4 mb-2 text-2xl font-bold leading-[30px]">{shots?.length ? `${plural(shots.length, 'plano')}${day ? ` · ${dayLabel(day.number)}` : ''}` : 'Planos'}</div>
+        {shots?.length === 0 && (
+          <EmptyState icon="film" title="Nenhum plano ainda" action={canEdit ? 'Novo plano' : undefined} onAction={() => setForm('new')}>
+            Crie o primeiro plano desta cena para começar a registrar takes.
+          </EmptyState>
         )}
-        {shots?.length === 0 && <Empty title="Sem planos">Crie o primeiro plano desta cena para começar a registrar os takes.</Empty>}
-        <div className="grid grid-cols-1 gap-2 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-3" data-testid="shots">
           {shots?.map((s) => {
-            const info = byShot[s.id]
-            const last = info?.last
+            const info = byShot[s.id] || { groups: [], proximo: 1, used: [] }
+            const cams = shotCameras(s) || (multi && info.used.length ? info.used : undefined)
+            const linked = linkedShots(s, shots).filter((x) => x.id !== s.id)
             return (
-              <Card key={s.id} className="flex items-stretch">
-                <button className="flex min-h-16 min-w-0 flex-1 items-center gap-3 px-4 py-2 text-left" onClick={() => nav(`/p/${projectId}/s/${sceneId}/sh/${s.id}${q}`)}>
-                  <div className="min-w-16 shrink-0 font-display text-3xl font-extrabold text-accent">{scene.number}{/^\d/.test(s.code) ? '.' : ''}{s.code}</div>
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate font-display font-bold">{s.shot_type || 'Plano'}{s.description ? ` — ${s.description}` : ''}</div>
-                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-xs text-muted">
-                      <span className="whitespace-nowrap">{plural(info?.n || 0, 'take')}{day && info && info.total > info.n ? ` hoje (${info.total} no total)` : ''}</span>
-                      {last && last.rows.some((r) => r.status) && (
-                        <span className="flex items-center gap-1 whitespace-nowrap">
-                          T{last.number}
-                          {last.rows.map((r) => r.status && (
-                            <span key={r.id} className={`rounded border px-1 font-medium ${STATUS[r.status].cls}`}>
-                              {last.rows.length > 1 ? `${r.camera} ` : ''}{STATUS[r.status].label}
-                            </span>
-                          ))}
-                        </span>
-                      )}
-                      {info?.multicam && <span className="shrink-0 rounded border border-accent px-1 font-medium text-accent" title="Rodou com mais de uma câmera">{info.multicam}</span>}
-                      {shotCameras(s) && <span className="whitespace-nowrap">câm. {shotCameras(s).join('+')}</span>}
-                      {linkedShots(s, shots).length > 1 && (
-                        <span className="whitespace-nowrap rounded border border-accent px-1 font-medium text-accent" title="Roda junto (mesma claquete)">
-                          com {linkedShots(s, shots).filter((x) => x.id !== s.id).map((x) => shotLabel(scene, x)).join(', ')}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  <IconChevron className="text-muted" />
-                </button>
-                {canEdit && (
-                  <IconBtn label="Opções do plano" className="h-auto" onClick={() => actionSheet(`Plano ${s.code}`, [
-                    { label: 'Editar plano', icon: <IconEdit />, onClick: () => setForm(s) },
-                    { label: 'Excluir plano', icon: <IconTrash />, danger: true, onClick: async () => {
-                      if (await confirm({ title: 'Excluir plano', danger: true, confirmLabel: 'Excluir',
-                        message: `Excluir o plano ${s.code} e seus ${info?.n || 0} takes?` })) { await deleteShot(s.id); notify('Plano excluído') }
-                    } },
-                  ])}><IconMore /></IconBtn>
-                )}
-              </Card>
+              <div key={s.id} data-testid="shot-card">
+                <PlanoCard numero={shotLabel(scene, s)} tipo={s.shot_type || undefined} descricao={s.description || undefined}
+                  cams={cams} junto={linked.length ? linked.map((x) => shotLabel(scene, x)).join(', ') : undefined}
+                  proximo={info.proximo} takes={chipsOf(info)} total={info.groups.length} podeGravar={canEdit}
+                  onGravar={() => nav(`/p/${projectId}/s/${sceneId}/sh/${s.id}${q}`, { state: { gravar: true } })}
+                  onVerTodos={() => openShot(s, 'lista=1')} onRenomear={canEdit ? () => setForm(s) : undefined} />
+              </div>
             )
           })}
         </div>
+        {canEdit && shots?.length > 0 && (
+          <div className="mt-3"><Button block icon="plus" onClick={() => setForm('new')} data-testid="new-shot">Novo plano na cena {scene.number}</Button></div>
+        )}
       </main>
-      {canEdit && (
-        <div className="fixed inset-x-0 bottom-0 z-20 mx-auto max-w-xl bg-gradient-to-t from-bg via-bg to-transparent px-4 pt-6 pb-bar">
-          <Btn full size="lg" onClick={() => setForm('new')}><IconPlus /> Novo plano</Btn>
-        </div>
-      )}
       <ShotForm open={!!form} shot={form === 'new' ? null : form} scene={scene} shots={shots || []} project={project}
-        onClose={() => setForm(null)} onCreated={(s) => nav(`/p/${projectId}/s/${sceneId}/sh/${s.id}${q}`)} />
-      <SceneForm open={editScene} onClose={() => setEditScene(false)} scene={scene} project={project} scenes={scenes} />
+        onClose={() => setForm(null)} onCreated={(s) => nav(`/p/${projectId}/s/${sceneId}/sh/${s.id}${q}`, { state: { gravar: true } })} />
+      <SceneForm open={editScene} onClose={() => setEditScene(false)} scene={scene} project={project} scenes={scenes}
+        onDeleted={() => nav(day ? backTo : `/p/${projectId}?tab=roteiro`)} />
     </>
   )
 }
 
 export function ShotForm({ open, onClose, shot, scene, shots, project, onCreated }) {
   const [f, setF] = useState({})
-  const { notify } = useDialog()
+  const { notify, confirm } = useDialog()
+  const remove = async () => {
+    const n = new Set((await getDb().takes.where('shot_id').equals(shot.id).toArray()).filter((t) => !t.deleted).map((t) => t.take_number)).size
+    if (!(await confirm({ title: 'Excluir plano', danger: true, confirmLabel: 'Excluir',
+      message: `Excluir o plano ${shotLabel(scene, shot)}${n ? ` e ${n === 1 ? 'o take dele' : `os ${n} takes dele`}` : ''}? Não dá para desfazer.` }))) return
+    await deleteShot(shot.id)
+    notify('Plano excluído')
+    onClose()
+  }
   const [lastOpen, setLastOpen] = useState(false)
   const multi = isMulticam(project)
   const others = shots.filter((s) => s.id !== shot?.id)
@@ -170,7 +170,10 @@ export function ShotForm({ open, onClose, shot, scene, shots, project, onCreated
   const chip = (on) => `min-h-11 rounded-lg border-2 px-3 font-display text-sm font-bold ${on ? 'border-accent bg-accent text-accent-ink' : 'border-line bg-surface2 text-ink'}`
   return (
     <Sheet open={open} onClose={onClose} title={shot ? `Editar plano ${shot.code}` : `Novo plano — cena ${scene.number}`}
-      footer={<Btn full size="lg" onClick={save}>{shot ? 'Salvar' : 'Criar e abrir'}</Btn>}>
+      footer={<div className="grid gap-2">
+        <Btn full size="lg" onClick={save}>{shot ? 'Salvar' : 'Criar e abrir'}</Btn>
+        {shot && <Btn full variant="danger" onClick={remove}><IconTrash /> Excluir plano</Btn>}
+      </div>}>
       <div className="grid gap-4">
         <TextInput label="Plano (número ou letra)" value={f.code || ''} onChange={(e) => setF({ ...f, code: e.target.value })} />
         <Field label="Enquadramento"><ChipSelect options={SHOT_TYPES} value={f.shot_type} onChange={(v) => setF({ ...f, shot_type: v })} /></Field>

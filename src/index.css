@@ -1,6 +1,7 @@
 @import "tailwindcss";
 @import "./ds/tokens.css" layer(base);
 @import "./ds/bundle.css" layer(components);
+@import "./ds/overrides.css" layer(components);
 
 /* Cores e fontes vêm do design system (src/ds/tokens.css): 4 temas em <html data-theme="claro|escuro|sol|noite">.
    Os nomes antigos (bg, surface, ink, accent…) continuam valendo nas telas e apontam para os tokens novos. */

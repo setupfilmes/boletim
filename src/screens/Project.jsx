@@ -1,36 +1,47 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useNavigate, useParams, useSearchParams } from 'react-router'
-import { TopBar, Btn, Empty, Card, Sheet, TextInput, TextArea, ChipSelect, Field, IconBtn, useDialog } from '../components/ui'
-import { IconPlus, IconMore, IconEdit, IconTrash, IconChevron } from '../components/icons'
+import { useNavigate, useParams, useSearchParams, Navigate } from 'react-router'
+import { TopBar, Btn, Empty, Sheet, TextInput, TextArea, ChipSelect, Field, IconBtn, useDialog } from '../components/ui'
+import { IconMore, IconTrash } from '../components/icons'
+import { Button, CenaCard, DiariaCard, TabBar, Banner } from '../ds/components'
 import { useProject, useScenes, useShotsByProject, useTakesByProject, useRole } from '../lib/hooks'
-import { createScene, createScenesBatch, deleteProject, deleteScene, update } from '../lib/repo'
+import { createScene, createScenesBatch, deleteScene, update } from '../lib/repo'
 import { useAuth } from '../auth'
 import { fmtDate, plural, todayISO } from '../lib/util'
-import { countTakes } from '../lib/cameras'
-import ProjectForm from './ProjectForm'
 import Reports from './Reports'
-import Team from './Team'
-import { DayForm, weekday } from './Day'
-import { useDays, ensureDays, dayLabel } from '../lib/days'
-
-const TABS = [
-  { key: 'cenas', label: 'Diárias' },
-  { key: 'diarias', label: 'Relatórios' },
-  { key: 'equipe', label: 'Equipe' },
-  { key: 'info', label: 'Info' },
-]
+import ThemePicker from '../components/ThemePicker'
+import { DayForm, DayBody, weekday } from './Day'
+import { useDays, ensureDays, dayLabel, createDay } from '../lib/days'
+import { statsByScene, sceneCardProps } from '../lib/stats'
 
 export const INT_EXT = ['INT', 'EXT', 'INT/EXT']
 export const PERIODS = ['DIA', 'NOITE', 'AMANHECER', 'ENTARDECER']
 
+// Abas do projeto, na ordem de uso no set (design system): Hoje · Diárias · Roteiro · Relatórios.
+// Ficha técnica, equipe e tema ficam no menu ⋮. Endereços antigos (?tab=cenas/info/equipe) ainda funcionam.
+const TAB_IDS = ['hoje', 'diarias', 'roteiro', 'relatorios']
+function resolveTab(params) {
+  const t = params.get('tab')
+  if (TAB_IDS.includes(t)) return t
+  if (t === 'cenas') return params.get('ver') === 'roteiro' ? 'roteiro' : 'diarias'
+  return 'hoje'
+}
+
 export default function Project() {
   const { projectId } = useParams()
   const [params, setParams] = useSearchParams()
-  const tab = params.get('tab') || 'cenas'
   const project = useProject(projectId)
   const { user } = useAuth()
   const role = useRole(project, user?.id)
+  const canEdit = role !== 'viewer'
+  const [menu, setMenu] = useState(false)
   const nav = useNavigate()
+  // diárias que surgiram de takes gravados viram linhas de verdade (para reordenar e sincronizar)
+  useEffect(() => { if (project && canEdit) ensureDays(project.id) }, [project?.id, canEdit]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const legacy = params.get('tab')
+  if (legacy === 'info') return <Navigate to={`/p/${projectId}/ficha`} replace />
+  if (legacy === 'equipe') return <Navigate to={`/p/${projectId}/equipe`} replace />
+  const tab = resolveTab(params)
 
   if (project === undefined) return null
   if (!project || project.deleted) {
@@ -39,45 +50,74 @@ export default function Project() {
 
   return (
     <>
-      <TopBar title={project.title} subtitle={project.production_type || 'Projeto'} back="/" />
-      <nav className="sticky top-16 z-20 grid grid-cols-4 border-b border-line bg-bg" style={{ top: 'calc(4rem + env(safe-area-inset-top))' }}>
-        {TABS.map((t) => (
-          <button key={t.key} onClick={() => setParams({ tab: t.key }, { replace: true })}
-            className={`min-h-12 border-b-4 font-display text-xs font-bold uppercase sm:text-sm sm:tracking-wide ${tab === t.key ? 'border-accent text-accent' : 'border-transparent text-muted'}`}>
-            {t.label}
-          </button>
-        ))}
-      </nav>
-      <main className="mx-auto max-w-5xl px-4 pt-4 pb-28">
-        {tab === 'cenas' && <DaysTab project={project} canEdit={role !== 'viewer'} view={params.get('ver') || 'diarias'}
-          onView={(v) => setParams({ tab: 'cenas', ver: v }, { replace: true })} />}
-        {tab === 'diarias' && <Reports project={project} />}
-        {tab === 'equipe' && <Team project={project} role={role} />}
-        {tab === 'info' && <InfoTab project={project} role={role} onDeleted={() => nav('/')} />}
+      <TopBar title={project.title} subtitle={project.production_type || 'Projeto'} back="/"
+        right={<IconBtn label="Menu do projeto" onClick={() => setMenu(true)} data-testid="project-menu"><IconMore /></IconBtn>} />
+      <main className="mx-auto max-w-3xl px-4 pt-4 pb-36">
+        {role === 'viewer' && (
+          <div className="mb-3"><Banner tone="compartilhado" title="Você só pode visualizar este projeto">Dá para ver tudo e gerar o boletim. Registrar e mudar takes fica com quem pode editar.</Banner></div>
+        )}
+        {tab === 'hoje' && <TodayTab project={project} canEdit={canEdit} onTab={(t) => setParams({ tab: t }, { replace: true })} />}
+        {tab === 'diarias' && <DaysList project={project} canEdit={canEdit} />}
+        {tab === 'roteiro' && <ScriptTab project={project} canEdit={canEdit} />}
+        {tab === 'relatorios' && <Reports project={project} />}
       </main>
+      <div className="safe-bottom fixed inset-x-0 bottom-0 z-30 border-t-0 bg-surface" data-testid="tabbar">
+        <div className="mx-auto max-w-3xl">
+          <TabBar value={tab} onChange={(t) => setParams({ tab: t }, { replace: true })} />
+        </div>
+      </div>
+      <Sheet open={menu} onClose={() => setMenu(false)} title="Menu">
+        <div className="grid gap-2">
+          <Button block icon="folder-open" onClick={() => nav('/')}>Projetos</Button>
+          <Button block icon="file-text" onClick={() => nav(`/p/${project.id}/ficha`)} data-testid="menu-ficha">Ficha técnica</Button>
+          <Button block icon="users" onClick={() => nav(`/p/${project.id}/equipe`)} data-testid="menu-equipe">Equipe</Button>
+          <Button block icon="settings" onClick={() => nav('/conta')}>Conta e sincronização</Button>
+          <div className="mt-2 text-[13px] font-bold uppercase tracking-[.07em] text-muted">Tema</div>
+          <ThemePicker />
+        </div>
+      </Sheet>
     </>
   )
 }
 
-// Aba Diárias: pastas Dia 01, Dia 02… (cenas na ordem de gravação) e o Roteiro com todas as cenas
-function DaysTab({ project, canEdit, view, onView }) {
-  // diárias que surgiram de takes gravados viram linhas de verdade (para poder reordenar e sincronizar)
-  useEffect(() => { if (canEdit) ensureDays(project.id) }, [project.id, canEdit])
-  const seg = (v, label) => (
-    <button onClick={() => onView(v)} data-testid={`ver-${v}`}
-      className={`min-h-11 rounded-lg font-display text-sm font-bold uppercase tracking-wide ${view === v ? 'bg-accent text-accent-ink' : 'text-muted'}`}>{label}</button>
-  )
+// Aba Hoje: a diária de hoje (cenas na ordem de gravação). Sem diária hoje: cria com um toque.
+function TodayTab({ project, canEdit, onTab }) {
+  const days = useDays(project.id)
+  const { notify, confirm } = useDialog()
+  const [edit, setEdit] = useState(false)
+  if (!days) return null
+  const today = todayISO()
+  const day = days.find((d) => d.date === today)
+  if (!day) {
+    const next = Math.max(0, ...days.map((d) => d.number)) + 1
+    return (
+      <Empty icon="calendar-days" title="Nenhuma diária hoje"
+        action={<div className="grid gap-2">
+          {canEdit && <Btn onClick={async () => { try { await createDay(project.id, { number: next, date: today }); notify(`${dayLabel(next)} criado`) } catch (e) { notify(e.message, 'error') } }}
+            data-testid="create-today">Começar o {dayLabel(next)} hoje</Btn>}
+          {days.length > 0 && <Btn variant="ghost" onClick={() => onTab('diarias')}>Ver as diárias</Btn>}
+        </div>}>
+        {fmtDate(today)} · {weekday(today)}. {canEdit ? 'Crie a diária e escolha as cenas do roteiro. Se gravar um take sem criar, ela aparece sozinha.' : 'Nada foi gravado hoje neste projeto.'}
+      </Empty>
+    )
+  }
   return (
     <>
-      <div className="mb-4 grid grid-cols-2 gap-1 rounded-xl border-2 border-line p-1">
-        {seg('diarias', 'Diárias')}{seg('roteiro', 'Roteiro')}
+      <div className="mb-3 flex items-baseline gap-3">
+        <span className="font-mono text-[40px] font-bold leading-[44px]">{String(day.number).padStart(2, '0')}</span>
+        <span className="min-w-0">
+          <span className="block text-[13px] font-bold uppercase tracking-[.07em] text-muted">Dia · hoje</span>
+          <span className="block truncate text-[17px] font-bold">{fmtDate(day.date)} · {weekday(day.date)}</span>
+        </span>
       </div>
-      {view === 'roteiro' ? <ScenesTab project={project} canEdit={canEdit} /> : <DaysList project={project} canEdit={canEdit} onView={onView} />}
+      <DayBody project={project} day={day} days={days} canEdit={canEdit} onEditDay={canEdit ? () => setEdit(true) : null} />
+      <DayForm open={edit} onClose={() => setEdit(false)} project={project} days={days} day={day} confirm={confirm} />
     </>
   )
 }
 
-function DaysList({ project, canEdit, onView }) {
+// Aba Diárias: Dia 01, Dia 02… da mais recente para a mais antiga; + Nova diária; cenas ainda sem diária
+function DaysList({ project, canEdit }) {
   const days = useDays(project.id)
   const scenes = useScenes(project.id)
   const shots = useShotsByProject(project.id)
@@ -86,144 +126,96 @@ function DaysList({ project, canEdit, onView }) {
   const { confirm } = useDialog()
   const [form, setForm] = useState(false)
   const stats = useMemo(() => {
-    const shotsById = Object.fromEntries((shots || []).map((s) => [s.id, s]))
-    const byDate = {}
-    for (const t of takes || []) (byDate[t.shoot_date] ||= []).push(t)
-    return Object.fromEntries(Object.entries(byDate).map(([d, list]) => [d, countTakes(list, shotsById)]))
-  }, [takes, shots])
+    const out = {}
+    for (const d of days || []) {
+      const st = statsByScene(takes, shots, d.date)
+      out[d.id] = Object.values(st).reduce((n, x) => n + x.takes, 0)
+    }
+    return out
+  }, [days, takes, shots])
   if (!days || !scenes) return null
-  const sceneNum = Object.fromEntries(scenes.map((s) => [s.id, s.number]))
   const today = todayISO()
-  // cenas que ainda não estão em nenhuma diária (criadas e ainda não gravadas): ficam à mão aqui também
   const scheduled = new Set(days.flatMap((d) => d.scenes.map((x) => x.scene_id)))
   const loose = scenes.filter((s) => !scheduled.has(s.id))
+  const ordered = [...days].sort((a, b) => String(b.date).localeCompare(String(a.date)) || b.number - a.number)
   return (
-    <>
-      {days.length === 0 && !loose.length && (
-        <Empty title="Nenhuma diária ainda">
+    <div className="grid gap-2">
+      {days.length === 0 && (
+        <Empty icon="calendar-days" title="Nenhuma diária ainda">
           Crie o Dia 01 e escolha as cenas da ordem do dia. Se você gravar sem criar, a diária aparece sozinha com a data do take.
         </Empty>
       )}
-      <div className="grid grid-cols-1 gap-2 md:grid-cols-2" data-testid="days">
-        {days.map((d) => {
-          const st = stats[d.date]
-          const nums = d.scenes.map((x) => sceneNum[x.scene_id]).filter(Boolean)
-          return (
-            <Card key={d.id} className="active:border-accent">
-              <button className="flex w-full items-center gap-3 p-4 text-left" onClick={() => nav(`/p/${project.id}/d/${d.id}`)}>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-baseline gap-2">
-                    <span className="font-display text-2xl font-extrabold text-accent">{dayLabel(d.number)}</span>
-                    <span className="font-display text-lg font-bold">{fmtDate(d.date)}</span>
-                    {d.date === today && <span className="rounded border border-accent px-1 text-xs font-bold text-accent">HOJE</span>}
-                  </div>
-                  <div className="truncate text-sm capitalize text-muted">{weekday(d.date)}</div>
-                  <div className="mt-1 truncate font-mono text-xs text-muted">
-                    {nums.length ? `Cenas ${nums.join(' → ')}` : 'sem cenas'}{st ? ` · ${plural(st.takes, 'take')} · ${st.good} good` : ''}
-                  </div>
-                </div>
-                <IconChevron className="text-muted" />
-              </button>
-            </Card>
-          )
-        })}
+      <div className="grid gap-2" data-testid="days">
+        {ordered.map((d) => (
+          <DiariaCard key={d.id} dia={d.number} data={`${fmtDate(d.date)} · ${weekday(d.date)}`} cenas={d.scenes.length}
+            takes={stats[d.id] || 0} hoje={d.date === today} onPress={() => nav(`/p/${project.id}/d/${d.id}`)} />
+        ))}
       </div>
+      {canEdit && <Button block icon="plus" onClick={() => setForm(true)} data-testid="new-day">Nova diária</Button>}
       {loose.length > 0 && (
-        <Card className="mt-3 p-4" data-testid="loose-scenes">
-          <div className="text-xs uppercase tracking-widest text-check-ink">Cenas sem diária ({loose.length})</div>
-          <p className="mt-1 text-sm text-muted">Ainda não gravadas nem colocadas em um dia. Toque para abrir; para planejar, crie a diária e use “+ Cena”.</p>
-          <div className="mt-3 flex flex-wrap gap-2">
+        <div className="mt-3" data-testid="loose-scenes">
+          <Banner tone="info" title={`Cenas sem diária (${loose.length})`}>
+            Ainda não gravadas nem colocadas em um dia: {loose.map((s) => s.number).join(', ')}. Estão no Roteiro.
+          </Banner>
+          <div className="mt-2 flex flex-wrap gap-2">
             {loose.map((s) => (
-              <button key={s.id} onClick={() => nav(`/p/${project.id}/s/${s.id}`)}
-                className="min-h-11 min-w-11 rounded-lg border-2 border-line bg-surface2 px-3 font-display text-lg font-extrabold text-accent active:border-accent">
-                {s.number}
-              </button>
+              <Button key={s.id} size="p" onClick={() => nav(`/p/${project.id}/s/${s.id}`)}>Cena {s.number}</Button>
             ))}
           </div>
-          <Btn size="sm" variant="ghost" full className="mt-3" onClick={() => onView('roteiro')}>Ver o roteiro completo</Btn>
-        </Card>
-      )}
-      {canEdit && (
-        <div className="fixed inset-x-0 bottom-0 z-20 mx-auto max-w-xl bg-gradient-to-t from-bg via-bg to-transparent px-4 pt-6 pb-bar">
-          <Btn full size="lg" onClick={() => setForm(true)} data-testid="new-day"><IconPlus /> Diária</Btn>
         </div>
       )}
       <DayForm open={form} onClose={() => setForm(false)} project={project} days={days} confirm={confirm}
         onCreated={(d) => nav(`/p/${project.id}/d/${d.id}`)} />
-    </>
+    </div>
   )
 }
 
-function ScenesTab({ project, canEdit }) {
+// Aba Roteiro: todas as cenas, com busca; as não gravadas com borda tracejada
+function ScriptTab({ project, canEdit }) {
   const scenes = useScenes(project.id)
-  const days = useDays(project.id)
-  const daysOf = (sid) => (days || []).filter((d) => d.scenes.some((x) => x.scene_id === sid)).map((d) => dayLabel(d.number))
   const shots = useShotsByProject(project.id)
   const takes = useTakesByProject(project.id)
+  const days = useDays(project.id)
   const nav = useNavigate()
-  const { actionSheet, confirm, notify } = useDialog()
-  const [edit, setEdit] = useState(null) // null | 'new' | scene
+  const [q, setQ] = useState('')
+  const [edit, setEdit] = useState(null)
   const [batch, setBatch] = useState(false)
-
-  const counts = useMemo(() => {
-    const shotsById = Object.fromEntries((shots || []).map((s) => [s.id, s]))
-    const c = {}
-    for (const s of shots || []) (c[s.scene_id] ||= { shots: 0, takes: 0, good: 0 }).shots++
-    const byScene = {}
-    for (const t of takes || []) (byScene[t.scene_id] ||= []).push(t)
-    for (const [id, list] of Object.entries(byScene)) Object.assign((c[id] ||= { shots: 0, takes: 0, good: 0 }), countTakes(list, shotsById))
-    return c
-  }, [shots, takes])
-
+  const stats = useMemo(() => statsByScene(takes, shots), [takes, shots])
   if (!scenes) return null
-
+  const daysOf = (sid) => (days || []).filter((d) => d.scenes.some((x) => x.scene_id === sid)).map((d) => dayLabel(d.number))
+  const match = (s) => !q || [s.number, s.location, s.description].some((x) => String(x || '').toLowerCase().includes(q.toLowerCase()))
+  const list = scenes.filter(match)
   return (
-    <>
-      {scenes.length === 0 && (
-        <Empty title="Sem cenas">Adicione as cenas do roteiro. Dá para criar várias de uma vez (ex: 1 a 32).</Empty>
+    <div className="grid gap-2">
+      {scenes.length === 0 ? (
+        <Empty icon="list" title="Roteiro vazio">Adicione as cenas do roteiro. Dá para criar várias de uma vez (ex.: 1 a 32).</Empty>
+      ) : (
+        <>
+          <TextInput placeholder="Buscar cena, locação…" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Buscar cena" />
+          <div className="text-[15px] text-muted">{plural(scenes.length, 'cena')} · {Object.keys(stats).length} gravadas</div>
+        </>
       )}
-      <div className="grid grid-cols-1 gap-2 md:grid-cols-2 lg:grid-cols-3">
-        {scenes.map((s) => {
-          const c = counts[s.id] || { shots: 0, takes: 0, good: 0 }
+      <div className="grid gap-2" data-testid="scenes">
+        {list.map((s) => {
+          const st = stats[s.id]
+          const ds = daysOf(s.id)
           return (
-            <Card key={s.id} className="flex items-stretch">
-              <button className="flex min-h-16 min-w-0 flex-1 items-center gap-3 px-4 py-2 text-left" onClick={() => nav(`/p/${project.id}/s/${s.id}`)}>
-                <div className="w-16 shrink-0 font-display text-3xl font-extrabold text-accent">{s.number}</div>
-                <div className="min-w-0 flex-1">
-                  <div className="truncate font-display font-bold">{[s.int_ext, s.period].filter(Boolean).join(' · ') || 'Cena'}</div>
-                  {s.location && <div className="truncate text-sm">{s.location}</div>}
-                  <div className="truncate font-mono text-xs text-muted">
-                    {plural(c.shots, 'plano')} · {plural(c.takes, 'take')}{c.good ? ` · ${c.good} good` : ''}{s.description ? ` · ${s.description}` : ''}
-                  </div>
-                  <div className="truncate font-mono text-xs text-accent">{daysOf(s.id).join(' · ') || <span className="text-muted/70">sem diária</span>}</div>
-                </div>
-                <IconChevron className="text-muted" />
-              </button>
-              {canEdit && (
-                <IconBtn label="Opções da cena" className="h-auto" onClick={() => actionSheet(`Cena ${s.number}`, [
-                  { label: 'Editar cena', icon: <IconEdit />, onClick: () => setEdit(s) },
-                  { label: 'Excluir cena', icon: <IconTrash />, danger: true, onClick: async () => {
-                    if (await confirm({ title: 'Excluir cena', danger: true, confirmLabel: 'Excluir',
-                      message: `Excluir a cena ${s.number} com ${c.shots} planos e ${c.takes} takes?` })) {
-                      await deleteScene(s.id); notify('Cena excluída')
-                    }
-                  } },
-                ])}><IconMore /></IconBtn>
-              )}
-            </Card>
+            <CenaCard key={s.id} {...sceneCardProps(s)} naoGravada={!st} planos={st?.planos || 0} takes={st?.takes || 0}
+              circulados={st?.circulados || 0} outrosDias={ds.length ? ds.join(', ') : undefined}
+              onPress={() => nav(`/p/${project.id}/s/${s.id}`)} />
           )
         })}
       </div>
       {canEdit && (
-        <div className="fixed inset-x-0 bottom-0 z-20 mx-auto grid max-w-xl grid-cols-3 gap-3 bg-gradient-to-t from-bg via-bg to-transparent px-4 pt-6 pb-bar">
-          <Btn size="lg" className="col-span-2" onClick={() => setEdit('new')}><IconPlus /> Cena</Btn>
-          <Btn size="lg" variant="surface" onClick={() => setBatch(true)}>Várias</Btn>
+        <div className="grid grid-cols-3 gap-2">
+          <Button className="col-span-2" icon="plus" onClick={() => setEdit('new')} data-testid="new-scene">Cena</Button>
+          <Button onClick={() => setBatch(true)}>Várias</Button>
         </div>
       )}
-      <SceneForm open={!!edit} scene={edit === 'new' ? null : edit} project={project} scenes={scenes}
+      <SceneForm open={!!edit} scene={null} project={project} scenes={scenes}
         onClose={() => setEdit(null)} onCreated={(s) => nav(`/p/${project.id}/s/${s.id}`)} />
       <BatchScenes open={batch} onClose={() => setBatch(false)} project={project} scenes={scenes} />
-    </>
+    </div>
   )
 }
 
@@ -232,9 +224,10 @@ function suggestNextScene(scenes) {
   return String(nums.length ? Math.max(...nums) + 1 : 1)
 }
 
-export function SceneForm({ open, onClose, scene, project, scenes, onCreated }) {
+// Criar / editar cena (com Excluir)
+export function SceneForm({ open, onClose, scene, project, scenes, onCreated, onDeleted }) {
   const [f, setF] = useState({})
-  const { notify } = useDialog()
+  const { notify, confirm } = useDialog()
   const init = () => setF(scene ? { ...scene } : { number: suggestNextScene(scenes || []), int_ext: 'INT', period: 'DIA', location: '', description: '' })
   // reinicia o formulário ao abrir
   const [lastOpen, setLastOpen] = useState(false)
@@ -244,17 +237,29 @@ export function SceneForm({ open, onClose, scene, project, scenes, onCreated }) 
     const number = String(f.number || '').trim()
     if (!number) return notify('Informe o número da cena', 'error')
     if ((scenes || []).some((s) => s.number.toLowerCase() === number.toLowerCase() && s.id !== scene?.id)) {
-      return notify(`A cena ${number} já existe`, 'error')
+      return notify(`A cena ${number} já existe no roteiro`, 'error')
     }
     const data = { number, int_ext: f.int_ext || null, period: f.period || null, location: f.location || null, description: f.description || null }
+    // os planos mostram "número da cena + código" (7A, 7.1): mudar a cena já renomeia todos
     if (scene) await update('scenes', scene.id, data)
     else { const s = await createScene(project.id, data); onCreated?.(s) }
     onClose()
   }
+  const remove = async () => {
+    if (!(await confirm({ title: 'Excluir cena', danger: true, confirmLabel: 'Excluir',
+      message: `Excluir a cena ${scene.number}? Apaga os planos e takes dela e tira a cena de todas as diárias. Não dá para desfazer.` }))) return
+    await deleteScene(scene.id)
+    notify('Cena excluída')
+    onClose()
+    onDeleted?.()
+  }
 
   return (
     <Sheet open={open} onClose={onClose} title={scene ? `Editar cena ${scene.number}` : 'Nova cena'}
-      footer={<Btn full size="lg" onClick={save}>{scene ? 'Salvar' : 'Criar cena'}</Btn>}>
+      footer={<div className="grid gap-2">
+        <Btn full size="lg" onClick={save}>{scene ? 'Salvar' : 'Criar cena'}</Btn>
+        {scene && <Btn full variant="danger" onClick={remove}><IconTrash /> Excluir cena</Btn>}
+      </div>}>
       <div className="grid gap-4">
         <TextInput label="Número da cena" value={f.number || ''} onChange={(e) => setF({ ...f, number: e.target.value })} inputMode="text" />
         <Field label="INT / EXT"><ChipSelect options={INT_EXT} value={f.int_ext} onChange={(v) => setF({ ...f, int_ext: v })} /></Field>
@@ -283,7 +288,7 @@ function BatchScenes({ open, onClose, project, scenes }) {
   return (
     <Sheet open={open} onClose={onClose} title="Criar várias cenas"
       footer={<Btn full size="lg" onClick={create}>Criar cenas</Btn>}>
-      <p className="mb-4 text-sm text-muted">Cria as cenas numeradas em sequência. Números que já existem são pulados.</p>
+      <p className="mb-4 text-[15px] text-muted">Cria as cenas numeradas em sequência. Números que já existem são pulados.</p>
       <div className="grid grid-cols-2 gap-3">
         <TextInput label="Da cena" inputMode="numeric" value={from} onChange={(e) => setFrom(e.target.value)} />
         <TextInput label="Até a cena" inputMode="numeric" value={to} onChange={(e) => setTo(e.target.value)} />
@@ -291,42 +296,3 @@ function BatchScenes({ open, onClose, project, scenes }) {
     </Sheet>
   )
 }
-
-function InfoTab({ project, role, onDeleted }) {
-  const [edit, setEdit] = useState(false)
-  const { confirm, notify } = useDialog()
-  const rows = [
-    ['Nome do projeto', project.title], ['Tipo', project.production_type], ['Produtora', project.company], ['Direção', project.director],
-    ['Dir. de foto', project.dop], ['1º AC', project.first_ac], ['2º AC', project.second_ac],
-    ['DIT / Logger', project.logger], ['Câmera', project.camera_body],
-    ['Lentes do projeto', (project.kit?.lens || []).join(', ') || 'Kit inteiro'],
-    ['Filtros do projeto', (project.kit?.filter || []).join(', ') || 'Kit inteiro'],
-    ['Criado em', fmtDate(project.created_at)], ['Observações', project.notes],
-  ]
-  return (
-    <>
-      <Card className="divide-y divide-line">
-        {rows.map(([k, v]) => (
-          <div key={k} className="flex gap-3 px-4 py-3">
-            <div className="w-36 shrink-0 text-[13px] font-bold uppercase tracking-[.07em] text-muted">{k}</div>
-            <div className="min-w-0 flex-1 break-words">{v || '—'}</div>
-          </div>
-        ))}
-      </Card>
-      <div className="mt-4 grid gap-3">
-        {role !== 'viewer' && <Btn variant="surface" onClick={() => setEdit(true)}><IconEdit /> Editar projeto</Btn>}
-        {role === 'owner' && (
-          <Btn variant="ghost" className="text-ng" onClick={async () => {
-            if (await confirm({ title: 'Excluir projeto', danger: true, confirmLabel: 'Excluir',
-              message: `Excluir “${project.title}” com todas as cenas, planos e takes?\nIsso também remove para quem tem o projeto compartilhado.` })) {
-              await deleteProject(project.id); notify('Projeto excluído'); onDeleted()
-            }
-          }}><IconTrash /> Excluir projeto</Btn>
-        )}
-        {role === 'viewer' && <p className="text-center text-sm text-muted">Você tem acesso somente leitura a este projeto.</p>}
-      </div>
-      <ProjectForm open={edit} onClose={() => setEdit(false)} project={project} />
-    </>
-  )
-}
-

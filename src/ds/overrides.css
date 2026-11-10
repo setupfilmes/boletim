@@ -1,0 +1,8 @@
+/* Ajustes do app sobre o CSS do design system (sem editar bundle.css, para poder atualizar do Claude Design) */
+
+/* Fileiras roláveis dentro de cartões não podem alargar a página no celular */
+.bc-pcard__takes, .bc-camtabs, .bc-qp__lista { min-width: 0; max-width: 100%; }
+.bc-card, .bc-pcard, .bc-cena__corpo { min-width: 0; }
+/* textos só para leitor de tela (.bc-sr, position absolute) não podem escapar das fileiras roláveis */
+.bc-pcard__takes, .bc-camtabs, .bc-qp__lista, .bc-badge, .bc-sync { position: relative; }
+.bc-sr { top: 0; left: 0; }
