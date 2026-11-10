@@ -61,7 +61,7 @@ export default function Login({ embedded }) {
       )}
       {mode === 'login' && recent.length > 0 && (
         <div className="mb-5">
-          <div className="mb-2 text-xs uppercase tracking-widest text-muted">Contas neste aparelho</div>
+          <div className="mb-2 text-[13px] font-bold uppercase tracking-[.07em] text-muted">Contas neste aparelho</div>
           <div className="grid grid-cols-1 gap-2">
             {recent.map((a) => (
               <div key={a.email} className={`flex items-center rounded-xl border-2 ${email === a.email ? 'border-accent' : 'border-line'} bg-surface`}>

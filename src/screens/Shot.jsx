@@ -265,7 +265,7 @@ function Chip({ label, value, onClick, wide, disabled }) {
   return (
     <button onClick={onClick} disabled={disabled}
       className={`min-h-16 rounded-xl border-2 border-line bg-surface2 px-3 py-1 text-left active:border-accent ${wide ? 'col-span-2' : ''}`}>
-      <div className="text-[11px] uppercase tracking-widest text-muted">{label}</div>
+      <div className="text-[13px] font-bold uppercase tracking-[.07em] text-muted">{label}</div>
       <div className={`truncate font-mono text-xl font-medium ${empty ? 'text-muted/50' : 'text-ink'}`}>
         {empty ? '—' : Array.isArray(value) ? joinFilters(value) : value}
       </div>
@@ -358,7 +358,7 @@ function TakeCard({ group, take: t, multi, cams, project, canEdit, onCam, onAddC
         </button>
       </div>
       <div className="mt-3">
-        <div className="mb-1 text-[11px] uppercase tracking-widest text-muted">Som</div>
+        <div className="mb-1 text-[13px] font-bold uppercase tracking-[.07em] text-muted">Som</div>
         <div className="grid grid-cols-2 gap-2" data-testid="sound" role="group" aria-label="Som">
           {Object.entries(SOUND).map(([k, lab]) => {
             const on = (t.sound || 'sync') === k
@@ -373,7 +373,7 @@ function TakeCard({ group, take: t, multi, cams, project, canEdit, onCam, onAddC
         </div>
       </div>
       <div className="mt-3">
-        <div className="mb-1 text-[11px] uppercase tracking-widest text-muted">Claquete</div>
+        <div className="mb-1 text-[13px] font-bold uppercase tracking-[.07em] text-muted">Claquete</div>
         <div className="flex flex-wrap gap-2" data-testid="marks">
           {MARKS.map((m) => (
             <button key={m.key} title={`${m.code}: ${m.title}`} disabled={d} aria-pressed={marks.includes(m.key)} onClick={() => toggleMark(m.key)}
@@ -389,7 +389,7 @@ function TakeCard({ group, take: t, multi, cams, project, canEdit, onCam, onAddC
         <Chip label="Clipe" value={t.clip} onClick={() => onText('clip')} disabled={d} />
         <button onClick={() => onText('notes')} disabled={d}
           className="col-span-2 block min-h-16 rounded-xl border-2 border-dashed border-line px-3 py-1 text-left">
-          <div className="text-[11px] uppercase tracking-widest text-muted">Notas de pós / VFX</div>
+          <div className="text-[13px] font-bold uppercase tracking-[.07em] text-muted">Notas de pós / VFX</div>
           <div className={`whitespace-pre-wrap text-sm ${t.notes ? 'text-ink' : 'text-muted/50'}`}>{t.notes || 'Tocar para anotar'}</div>
         </button>
         {fields.filter((f) => !f.sticky).map((f) => <ExtraChip key={f.key} f={f} />)}
@@ -398,7 +398,7 @@ function TakeCard({ group, take: t, multi, cams, project, canEdit, onCam, onAddC
       <button onClick={() => setOpen((o) => !o)} aria-expanded={open} data-testid="camera-toggle"
         className="mt-2 flex min-h-14 w-full items-center gap-2 rounded-xl border-2 border-line bg-surface2 px-3 py-1 text-left md:hidden">
         <div className="min-w-0 flex-1">
-          <div className="text-[11px] uppercase tracking-widest text-muted">Câmera{multi && t.camera ? ` ${t.camera}` : ''}</div>
+          <div className="text-[13px] font-bold uppercase tracking-[.07em] text-muted">Câmera{multi && t.camera ? ` ${t.camera}` : ''}</div>
           {!open && <div className={`font-mono text-sm leading-snug ${summary.length ? 'text-ink' : 'text-muted/50'}`}>{summary.join(' · ') || '—'}</div>}
         </div>
         <span className="shrink-0 font-display text-xs font-bold uppercase text-accent">{open ? 'Recolher' : 'Editar'}</span>

@@ -82,7 +82,7 @@ export default function Projects() {
               <Card key={p.id} className="active:border-accent">
                 <button className="flex w-full items-center gap-3 p-4 text-left" onClick={() => nav(`/p/${p.id}`)}>
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 text-xs uppercase tracking-widest text-muted">
+                    <div className="flex items-center gap-2 text-[13px] font-bold uppercase tracking-[.07em] text-muted">
                       <span>{p.production_type || 'Projeto'}</span>
                       {shared && <span className="rounded border border-accent px-1 text-accent">Compartilhado</span>}
                       {isNew.has(p.id) && <span className="rounded bg-accent px-1 font-bold text-accent-ink">Novo</span>}

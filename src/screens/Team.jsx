@@ -135,7 +135,7 @@ export default function Team({ project, role }) {
           <div key={m.user_id} className="flex items-center gap-3 px-4 py-2">
             <div className="min-w-0 flex-1">
               <div className="truncate font-bold">{m.email}{m.user_id === user.id ? ' (você)' : ''}</div>
-              <div className="text-xs uppercase tracking-widest text-muted">{m.role === 'viewer' ? 'Só visualizar' : 'Pode editar'}</div>
+              <div className="text-[13px] font-bold uppercase tracking-[.07em] text-muted">{m.role === 'viewer' ? 'Só visualizar' : 'Pode editar'}</div>
             </div>
             {isOwner && <Btn size="sm" variant="ghost" onClick={() => transfer(m)} data-testid="transfer">Tornar dono</Btn>}
             {(isOwner || m.user_id === user.id) && <IconBtn label="Remover" onClick={() => remove(m)}><IconTrash /></IconBtn>}
@@ -145,7 +145,7 @@ export default function Team({ project, role }) {
           <div key={l.token} className="flex items-center gap-3 px-4 py-2" data-testid="invite-link">
             <div className="min-w-0 flex-1">
               <div className="truncate font-bold text-muted">Link de convite (WhatsApp)</div>
-              <div className="text-xs uppercase tracking-widest text-check">
+              <div className="text-xs uppercase tracking-widest text-check-ink">
                 Aguardando · {l.role === 'viewer' ? 'Só visualizar' : 'Pode editar'} · vale até {fmtDate(l.expires_at)}
               </div>
             </div>
@@ -156,7 +156,7 @@ export default function Team({ project, role }) {
           <div key={i.email} className="flex items-center gap-3 px-4 py-2" data-testid="invite">
             <div className="min-w-0 flex-1">
               <div className="truncate font-bold text-muted">{i.email}</div>
-              <div className="text-xs uppercase tracking-widest text-check">
+              <div className="text-xs uppercase tracking-widest text-check-ink">
                 Convite pendente · {i.role === 'viewer' ? 'Só visualizar' : 'Pode editar'}
               </div>
             </div>
@@ -165,7 +165,7 @@ export default function Team({ project, role }) {
         ))}
       </Card>
       {isOwner && (unsynced ? (
-        <p className="text-sm text-check">Este projeto ainda não foi enviado para a nuvem. Aguarde a sincronização para compartilhar.</p>
+        <p className="text-sm text-check-ink">Este projeto ainda não foi enviado para a nuvem. Aguarde a sincronização para compartilhar.</p>
       ) : (
         <>
         <Card className="grid gap-3 p-4" data-testid="invite-by-link">

@@ -130,7 +130,7 @@ export default function ProjectForm({ open, onClose, project, onSaved }) {
           <div className="grid gap-2" data-testid="extra-fields">
             {EXTRA_GROUPS.map((g) => (
               <div key={g} className="flex flex-wrap items-center gap-2">
-                <span className="w-20 shrink-0 font-mono text-xs uppercase tracking-widest text-muted">{g}</span>
+                <span className="w-20 shrink-0 font-mono text-[13px] font-bold uppercase tracking-[.07em] text-muted">{g}</span>
                 {EXTRA_FIELDS.filter((x) => x.group === g).map((x) => {
                   const on = (f.kit?.fields || []).includes(x.key)
                   return (

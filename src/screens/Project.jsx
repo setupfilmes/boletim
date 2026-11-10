@@ -130,7 +130,7 @@ function DaysList({ project, canEdit, onView }) {
       </div>
       {loose.length > 0 && (
         <Card className="mt-3 p-4" data-testid="loose-scenes">
-          <div className="text-xs uppercase tracking-widest text-check">Cenas sem diária ({loose.length})</div>
+          <div className="text-xs uppercase tracking-widest text-check-ink">Cenas sem diária ({loose.length})</div>
           <p className="mt-1 text-sm text-muted">Ainda não gravadas nem colocadas em um dia. Toque para abrir; para planejar, crie a diária e use “+ Cena”.</p>
           <div className="mt-3 flex flex-wrap gap-2">
             {loose.map((s) => (
@@ -308,7 +308,7 @@ function InfoTab({ project, role, onDeleted }) {
       <Card className="divide-y divide-line">
         {rows.map(([k, v]) => (
           <div key={k} className="flex gap-3 px-4 py-3">
-            <div className="w-36 shrink-0 text-xs uppercase tracking-widest text-muted">{k}</div>
+            <div className="w-36 shrink-0 text-[13px] font-bold uppercase tracking-[.07em] text-muted">{k}</div>
             <div className="min-w-0 flex-1 break-words">{v || '—'}</div>
           </div>
         ))}

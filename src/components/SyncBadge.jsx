@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router'
 import { syncStore } from '../lib/sync'
 import { getDb, TABLES } from '../lib/db'
 import { useAuth } from '../auth'
-import { IconCloud, IconCloudOff, IconSync } from './icons'
+import { SyncIndicator } from '../ds/components'
 
 export function usePending() {
   return useLiveQuery(async () => {
@@ -15,29 +15,39 @@ export function usePending() {
   }, [], 0)
 }
 
+// Registros que o servidor recusou (ficam no aparelho com _err)
+export function useErrored() {
+  return useLiveQuery(async () => {
+    const db = getDb()
+    let n = 0
+    for (const t of TABLES) n += (await db[t].where('_dirty').equals(1).toArray()).filter((r) => r._err).length
+    return n
+  }, [], 0)
+}
+
 export function useSyncState() {
   return useSyncExternalStore(syncStore.subscribe, syncStore.get)
 }
 
-export default function SyncBadge() {
+// Estado no vocabulário do design system: enviado | pendente | enviando | offline | erro
+export function useSyncView() {
   const s = useSyncState()
   const pending = usePending()
+  const errored = useErrored()
   const { sessionOk } = useAuth()
+  if (!sessionOk || s.status === 'offline') return { state: 'offline', count: pending }
+  if (s.status === 'error' || errored) return { state: 'erro', count: errored || 1 }
+  if (s.status === 'syncing' && pending) return { state: 'enviando', count: pending }
+  if (pending) return { state: 'pendente', count: pending }
+  return { state: 'enviado', count: 0 }
+}
+
+export default function SyncBadge({ compact = true }) {
+  const v = useSyncView()
   const nav = useNavigate()
-
-  let icon, color, label
-  if (!sessionOk) { icon = <IconCloudOff size={20} />; color = 'text-check'; label = 'Sessão expirada — só no aparelho' }
-  else if (s.status === 'syncing') { icon = <IconSync size={20} className="animate-spin" />; color = 'text-accent'; label = 'Sincronizando' }
-  else if (s.status === 'error') { icon = <IconCloudOff size={20} />; color = 'text-ng'; label = 'Erro de sincronização' }
-  else if (s.status === 'offline') { icon = <IconCloudOff size={20} />; color = 'text-muted'; label = 'Sem internet — salvo no aparelho' }
-  else if (pending > 0) { icon = <IconCloud size={20} />; color = 'text-check'; label = 'Alterações aguardando envio' }
-  else { icon = <IconCloud size={20} />; color = 'text-good'; label = 'Tudo sincronizado' }
-
   return (
-    <button onClick={() => nav('/conta')} aria-label={label} title={label} data-testid="sync-badge"
-      className={`relative inline-flex h-12 min-w-12 items-center justify-center gap-1 rounded-xl px-2 ${color}`}>
-      {icon}
-      {pending > 0 && <span className="font-mono text-xs font-medium">{pending}</span>}
-    </button>
+    <span data-testid="sync-badge" className="inline-flex">
+      <SyncIndicator compact={compact} state={v.state} count={v.count} onPress={() => nav('/conta')} />
+    </span>
   )
 }

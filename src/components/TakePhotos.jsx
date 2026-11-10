@@ -45,7 +45,7 @@ export default function TakePhotos({ take, photos, canEdit, caption }) {
   const pickBtn = 'flex h-16 w-16 shrink-0 cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-line text-muted active:border-accent'
   return (
     <div className="mt-2" data-testid="take-photos">
-      <div className="mb-1 text-[11px] uppercase tracking-widest text-muted">Fotos{photos.length ? ` (${photos.length})` : ''}</div>
+      <div className="mb-1 text-[13px] font-bold uppercase tracking-[.07em] text-muted">Fotos{photos.length ? ` (${photos.length})` : ''}</div>
       <div className="flex gap-2 overflow-x-auto pb-1">
         {photos.map((p) => <Thumb key={p.id} photo={p} onClick={() => setOpenId(p.id)} />)}
         {canEdit && (

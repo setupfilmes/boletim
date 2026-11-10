@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { TopBar, Btn, Card, Sheet, TextInput, useDialog } from '../components/ui'
-import { IconSun, IconSync } from '../components/icons'
+import { IconSync } from '../components/icons'
 import { useAuth } from '../auth'
 import { syncNow } from '../lib/sync'
 import { usePending, useSyncState } from '../components/SyncBadge'
@@ -9,8 +9,9 @@ import { createDemoProject } from '../lib/demo'
 import { useNavigate } from 'react-router'
 import { configSource, clearDeviceConfig } from '../lib/supabase'
 import { fmtDate, fmtTime } from '../lib/util'
-import { useTheme } from '../theme'
 import Login from './Login'
+import ThemePicker from '../components/ThemePicker'
+import SyncBadge from '../components/SyncBadge'
 import { checkLatest, hardUpdate } from '../lib/appUpdate'
 
 export default function Account() {
@@ -18,7 +19,6 @@ export default function Account() {
   const { user, sessionOk } = auth
   const pending = usePending()
   const s = useSyncState()
-  const { theme, setTheme } = useTheme()
   const { confirm, notify } = useDialog()
   const nav = useNavigate()
   const [relogin, setRelogin] = useState(false)
@@ -54,8 +54,9 @@ export default function Account() {
       <TopBar title="Conta" subtitle={user?.email} />
       <main className="mx-auto grid max-w-2xl gap-4 px-4 pt-4 pb-28">
         <Card className="p-4">
-          <div className="mb-1 text-xs uppercase tracking-widest text-muted">Sincronização</div>
-          <div className="font-display text-lg font-bold">{status}</div>
+          <div className="mb-1 text-[13px] font-bold uppercase tracking-[.07em] text-muted">Sincronização</div>
+          <div className="flex items-center gap-3"><SyncBadge compact={false} /></div>
+          <div className="mt-2 text-[17px] font-bold">{status}</div>
           <div className="mt-1 font-mono text-sm text-muted">
             {pending} alteraç{pending === 1 ? 'ão' : 'ões'} só no aparelho
             {s.lastSync ? ` · última: ${fmtDate(s.lastSync)} ${fmtTime(s.lastSync)}` : ''}
@@ -68,16 +69,12 @@ export default function Account() {
         </Card>
 
         <Card className="p-4">
-          <div className="mb-3 text-xs uppercase tracking-widest text-muted">Tela</div>
-          <div className="grid grid-cols-2 gap-2">
-            <Btn variant={theme === 'dark' ? 'primary' : 'ghost'} onClick={() => setTheme('dark')}>Escuro</Btn>
-            <Btn variant={theme === 'sun' ? 'primary' : 'ghost'} onClick={() => setTheme('sun')}><IconSun size={18} /> Modo sol</Btn>
-          </div>
-          <p className="mt-2 text-xs text-muted">Modo sol: fundo branco e contraste máximo para ler em externa.</p>
+          <div className="mb-3 text-[13px] font-bold uppercase tracking-[.07em] text-muted">Tela</div>
+          <ThemePicker />
         </Card>
 
         <Card className="p-4">
-          <div className="mb-3 text-xs uppercase tracking-widest text-muted">Perfil</div>
+          <div className="mb-3 text-[13px] font-bold uppercase tracking-[.07em] text-muted">Perfil</div>
           <div className="flex gap-2">
             <div className="flex-1"><TextInput value={name} onChange={(e) => setName(e.target.value)} placeholder="Seu nome" aria-label="Seu nome" /></div>
             <Btn variant="surface" disabled={!sessionOk || name === user?.name}
@@ -86,13 +83,13 @@ export default function Account() {
         </Card>
 
         <Card className="p-4">
-          <div className="mb-3 text-xs uppercase tracking-widest text-muted">Backup</div>
+          <div className="mb-3 text-[13px] font-bold uppercase tracking-[.07em] text-muted">Backup</div>
           <Btn variant="surface" full onClick={async () => { await shareFile(await buildBackup()) }}>Exportar backup (JSON)</Btn>
           <p className="mt-2 text-xs text-muted">Cópia de todos os seus projetos em um arquivo — funciona offline.</p>
         </Card>
 
         <Card className="p-4">
-          <div className="mb-3 text-xs uppercase tracking-widest text-muted">Demonstração</div>
+          <div className="mb-3 text-[13px] font-bold uppercase tracking-[.07em] text-muted">Demonstração</div>
           <Btn variant="surface" full data-testid="create-demo" onClick={async () => {
             if (!(await confirm({ title: 'Projeto de demonstração', confirmLabel: 'Criar',
               message: 'Cria o projeto fictício “Noite Adentro” com 5 diárias preenchidas (1 a 3 câmeras, planos vinculados, fotos de referência) para ver o app e os relatórios. Pode excluir depois em Info → Excluir projeto.' }))) return
@@ -103,7 +100,7 @@ export default function Account() {
         </Card>
 
         <Card className="p-4">
-          <div className="mb-3 text-xs uppercase tracking-widest text-muted">Atualização do app</div>
+          <div className="mb-3 text-[13px] font-bold uppercase tracking-[.07em] text-muted">Atualização do app</div>
           <Btn variant="surface" full onClick={updateApp} disabled={updating} data-testid="update-app">
             <IconSync size={18} /> {updating ? 'Atualizando…' : 'Atualizar o app'}
           </Btn>

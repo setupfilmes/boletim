@@ -2,22 +2,24 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState } f
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router'
 import { IconBack, IconX } from './icons'
+import { Icon } from '../ds/components'
 import SyncBadge from './SyncBadge'
 
 const cx = (...a) => a.filter(Boolean).join(' ')
 
 export function Btn({ variant = 'primary', size = 'md', full, className, children, ...p }) {
+  // Estilo do design system: contorno 2px "borda", primário preenchido com "ação", perigo em NG
   const v = {
-    primary: 'bg-accent text-accent-ink border-accent',
-    surface: 'bg-surface2 text-ink border-line',
-    ghost: 'bg-transparent text-ink border-line',
-    danger: 'bg-ng text-white border-ng',
+    primary: 'bg-accent text-accent-ink border-accent active:opacity-85',
+    surface: 'bg-surface text-ink border-borda active:bg-surface2',
+    ghost: 'bg-transparent text-ink border-borda active:bg-surface2',
+    danger: 'bg-surface text-ng border-ng active:bg-ng-soft',
   }[variant]
-  const s = { sm: 'min-h-10 px-3 text-sm', md: 'min-h-12 px-4 text-base', lg: 'min-h-16 px-5 text-lg' }[size]
+  const s = { sm: 'min-h-12 px-4 text-[15px] rounded-[10px]', md: 'min-h-14 px-5 text-[17px] rounded-[10px]', lg: 'min-h-[72px] px-6 text-xl rounded-2xl' }[size]
   return (
     <button
-      className={cx('inline-flex items-center justify-center gap-2 rounded-xl border-2 font-display font-bold tracking-wide',
-        'active:scale-[.98] transition disabled:opacity-40', v, s, full && 'w-full', className)}
+      className={cx('inline-flex items-center justify-center gap-2 border-2 font-sans font-bold',
+        'transition disabled:cursor-not-allowed disabled:opacity-45', v, s, full && 'w-full', className)}
       {...p}
     >
       {children}
@@ -28,7 +30,7 @@ export function Btn({ variant = 'primary', size = 'md', full, className, childre
 export function IconBtn({ label, className, children, ...p }) {
   return (
     <button aria-label={label} title={label}
-      className={cx('inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-xl text-ink active:bg-surface2', className)} {...p}>
+      className={cx('inline-flex h-12 min-w-12 shrink-0 items-center justify-center rounded-[10px] text-ink active:bg-surface2', className)} {...p}>
       {children}
     </button>
   )
@@ -37,14 +39,14 @@ export function IconBtn({ label, className, children, ...p }) {
 export function TopBar({ title, subtitle, back, right }) {
   const nav = useNavigate()
   return (
-    <header className="safe-top sticky top-0 z-30 border-b border-line bg-bg/95 backdrop-blur">
+    <header className="safe-top sticky top-0 z-30 border-b-2 border-line bg-bg">
       <div className="flex min-h-16 items-center gap-1 px-2">
         {back ? (
           <IconBtn label="Voltar" onClick={() => (typeof back === 'string' ? nav(back) : nav(-1))}><IconBack size={26} /></IconBtn>
         ) : <div className="w-2" />}
         <div className="min-w-0 flex-1">
-          {subtitle && <div className="truncate text-xs uppercase tracking-widest text-muted">{subtitle}</div>}
-          <h1 className="truncate font-display text-xl font-extrabold leading-tight">{title}</h1>
+          {subtitle && <div className="truncate text-[13px] font-bold uppercase leading-4 tracking-[.07em] text-muted">{subtitle}</div>}
+          <h1 className="truncate text-xl font-bold leading-[26px]">{title}</h1>
         </div>
         <SyncBadge />
         {right}
@@ -65,15 +67,16 @@ export function Sheet({ open, onClose, title, children, footer, tall }) {
   if (!open) return null
   return createPortal(
     <div className="fixed inset-0 z-50 flex flex-col justify-end" role="dialog" aria-modal="true" aria-label={title}>
-      <div className="anim-fade absolute inset-0 bg-black/70" onClick={onClose} />
-      <div className={cx('anim-sheet safe-bottom relative flex flex-col rounded-t-3xl border-t-2 border-accent bg-surface md:mx-auto md:mb-6 md:w-full md:max-w-2xl md:rounded-3xl md:border-2',
+      <div className="anim-fade absolute inset-0" style={{ background: 'var(--veu)' }} onClick={onClose} />
+      <div className={cx('sheet-box anim-sheet safe-bottom relative flex flex-col rounded-t-2xl border-2 border-b-0 border-line bg-surface md:mx-auto md:mb-6 md:w-full md:max-w-2xl md:rounded-2xl md:border-b-2',
         tall ? 'h-[92dvh] md:h-[85dvh]' : 'max-h-[92dvh] md:max-h-[85dvh]')}>
-        <div className="flex items-center gap-2 px-4 pt-3 pb-2">
-          <h2 className="flex-1 font-display text-lg font-extrabold uppercase tracking-wide">{title}</h2>
+        <div className="mx-auto mt-2 h-1.5 w-12 rounded-full bg-line" aria-hidden="true" />
+        <div className="flex items-center gap-2 px-4 pt-2 pb-2">
+          <h2 className="flex-1 text-xl font-bold leading-[26px]">{title}</h2>
           <IconBtn label="Fechar" onClick={onClose}><IconX /></IconBtn>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">{children}</div>
-        {footer && <div className="border-t border-line px-4 py-3">{footer}</div>}
+        {footer && <div className="border-t-2 border-line px-4 py-3">{footer}</div>}
       </div>
     </div>,
     document.body,
@@ -84,9 +87,9 @@ export function Sheet({ open, onClose, title, children, footer, tall }) {
 export function Field({ label, hint, children }) {
   return (
     <div role="group" aria-label={label}>
-      <div className="mb-1 text-xs uppercase tracking-widest text-muted">{label}</div>
+      <div className="mb-1.5 text-[13px] font-bold uppercase leading-4 tracking-[.07em] text-muted">{label}</div>
       {children}
-      {hint && <div className="mt-1 text-xs text-muted">{hint}</div>}
+      {hint && <div className="mt-1 text-[15px] leading-5 text-muted">{hint}</div>}
     </div>
   )
 }
@@ -94,14 +97,14 @@ export function Field({ label, hint, children }) {
 function Labeled({ label, hint, children }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-xs uppercase tracking-widest text-muted">{label}</span>
+      <span className="mb-1.5 block text-[13px] font-bold uppercase leading-4 tracking-[.07em] text-muted">{label}</span>
       {children}
-      {hint && <span className="mt-1 block text-xs text-muted">{hint}</span>}
+      {hint && <span className="mt-1 block text-[15px] leading-5 text-muted">{hint}</span>}
     </label>
   )
 }
 
-const inputCls = 'w-full min-h-12 rounded-xl border-2 border-line bg-bg px-3 py-2 text-ink outline-none focus:border-accent placeholder:text-muted/60'
+const inputCls = 'w-full min-h-14 rounded-[10px] border-2 border-borda bg-surface px-3 py-2 text-[17px] text-ink outline-none focus:border-ink placeholder:text-faint'
 
 export function TextInput({ label, hint, ...p }) {
   const el = <input className={inputCls} {...p} />
@@ -123,8 +126,9 @@ export function ChipSelect({ options, value, onChange, allowEmpty = true }) {
         return (
           <button type="button" key={val}
             onClick={() => onChange(on && allowEmpty ? null : val)}
-            className={cx('min-h-11 rounded-lg border-2 px-3 font-display text-sm font-bold',
-              on ? 'border-accent bg-accent text-accent-ink' : 'border-line bg-surface2 text-ink')}>
+            aria-pressed={on}
+            className={cx('min-h-12 rounded-[10px] border-2 px-4 text-[15px] font-bold',
+              on ? 'border-accent bg-accent text-accent-ink' : 'border-borda bg-surface text-ink')}>
             {lab}
           </button>
         )
@@ -133,11 +137,15 @@ export function ChipSelect({ options, value, onChange, allowEmpty = true }) {
   )
 }
 
-export function Empty({ title, children }) {
+export function Empty({ title, children, icon = 'clapperboard', action }) {
   return (
-    <div className="mx-auto max-w-md px-6 py-14 text-center">
-      <div className="font-display text-xl font-extrabold">{title}</div>
-      <div className="mt-2 text-sm text-muted">{children}</div>
+    <div className="mx-auto flex max-w-md flex-col items-center px-6 py-12 text-center">
+      <span className="mb-4 inline-flex h-20 w-20 items-center justify-center rounded-full border-2 border-dashed border-borda text-muted" aria-hidden="true">
+        <Icon name={icon} size={36} strokeWidth={2} />
+      </span>
+      <div className="text-2xl font-bold leading-[30px]">{title}</div>
+      <div className="mt-2 text-[15px] leading-5 text-muted">{children}</div>
+      {action && <div className="mt-5">{action}</div>}
     </div>
   )
 }
@@ -181,8 +189,8 @@ export function DialogProvider({ children }) {
         <div className="grid grid-cols-1 gap-2">
           {actions?.items.filter(Boolean).map((it) => (
             <button key={it.label} onClick={() => { setActions(null); it.onClick() }}
-              className={cx('flex min-h-14 items-center gap-3 rounded-xl border-2 border-line bg-surface2 px-4 text-left font-display text-base font-bold',
-                it.danger && 'text-ng')}>
+              className={cx('flex min-h-14 items-center gap-3 rounded-[10px] border-2 bg-surface px-4 text-left text-[17px] font-bold active:bg-surface2',
+                it.danger ? 'border-ng text-ng' : 'border-borda')}>
               {it.icon}{it.label}
             </button>
           ))}
@@ -190,8 +198,8 @@ export function DialogProvider({ children }) {
       </Sheet>
       {toast && createPortal(
         <div className="pointer-events-none fixed inset-x-0 z-[60] flex justify-center px-4" style={{ top: 'calc(4.5rem + env(safe-area-inset-top))' }}>
-          <div className={cx('anim-fade rounded-xl border-2 px-4 py-3 font-display text-sm font-bold shadow-xl',
-            toast.kind === 'error' ? 'border-ng bg-ng text-white' : 'border-accent bg-surface text-ink')}>
+          <div role="status" className={cx('anim-fade max-w-md rounded-[10px] border-2 px-4 py-3 text-[15px] font-bold leading-5',
+            toast.kind === 'error' ? 'border-ng bg-ng text-on-ng' : 'border-ink bg-surface text-ink')}>
             {toast.msg}
           </div>
         </div>, document.body)}

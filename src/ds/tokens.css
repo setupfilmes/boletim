@@ -1,0 +1,168 @@
+/* Boletim de Câmera — generated from tokens.json */
+@font-face { font-family: "Atkinson Hyperlegible Next"; src: url("./fonts/AtkinsonHyperlegibleNext-Regular.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: "Atkinson Hyperlegible Next"; src: url("./fonts/AtkinsonHyperlegibleNext-Bold.woff2") format("woff2"); font-weight: 700; font-style: normal; font-display: swap; }
+@font-face { font-family: "Atkinson Hyperlegible Next"; src: url("./fonts/AtkinsonHyperlegibleNext-ExtraBold.woff2") format("woff2"); font-weight: 800; font-style: normal; font-display: swap; }
+@font-face { font-family: "Atkinson Hyperlegible Mono"; src: url("./fonts/AtkinsonHyperlegibleMono-Regular.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: "Atkinson Hyperlegible Mono"; src: url("./fonts/AtkinsonHyperlegibleMono-Bold.woff2") format("woff2"); font-weight: 700; font-style: normal; font-display: swap; }
+:root, [data-theme="claro"] {
+  --fundo: #f2f1ec;
+  --superficie: #ffffff;
+  --superficie-2: #e9e8e2;
+  --tinta: #141518;
+  --tinta-2: #474a52;
+  --tinta-3: #62656d;
+  --linha: #c9c7be;
+  --borda: #7a7d85;
+  --acao: #141518;
+  --on-acao: #ffffff;
+  --foco: #1a5bd6;
+  --good: #006f5c;
+  --on-good: #ffffff;
+  --good-suave: #d7f0e5;
+  --ng: #b03208;
+  --on-ng: #ffffff;
+  --ng-suave: #fbe1d6;
+  --check: #f0a800;
+  --on-check: #141518;
+  --check-tinta: #835200;
+  --check-suave: #fdefc8;
+  --alterado: #1a5bd6;
+  --on-alterado: #ffffff;
+  --cam-a: #1d5fc4;
+  --cam-b: #a3317a;
+  --cam-c: #77491c;
+  --on-cam: #ffffff;
+  --veu: rgba(20,21,24,0.48);
+  --sombra-folha: 0 -8px 24px rgba(20,21,24,0.18);
+}
+[data-theme="escuro"] {
+  --fundo: #121316;
+  --superficie: #1c1e22;
+  --superficie-2: #282b30;
+  --tinta: #f2f1ec;
+  --tinta-2: #b9bbc2;
+  --tinta-3: #93969e;
+  --linha: #41454c;
+  --borda: #7c808a;
+  --acao: #f2f1ec;
+  --on-acao: #121316;
+  --foco: #78aaff;
+  --good: #3fd6b4;
+  --on-good: #06140f;
+  --good-suave: #0d3327;
+  --ng: #ff8c5e;
+  --on-ng: #1a0a04;
+  --ng-suave: #3d1608;
+  --check: #ffc53d;
+  --on-check: #141518;
+  --check-tinta: #ffc53d;
+  --check-suave: #3a2c05;
+  --alterado: #78aaff;
+  --on-alterado: #121316;
+  --cam-a: #78aaff;
+  --cam-b: #f08cc8;
+  --cam-c: #e2aa74;
+  --on-cam: #121316;
+  --veu: rgba(0,0,0,0.64);
+  --sombra-folha: 0 -8px 24px rgba(0,0,0,0.6);
+  color-scheme: dark;
+}
+[data-theme="sol"] {
+  --fundo: #ffffff;
+  --superficie: #ffffff;
+  --superficie-2: #ededed;
+  --tinta: #000000;
+  --tinta-2: #1f1f1f;
+  --tinta-3: #383838;
+  --linha: #5c5c5c;
+  --borda: #000000;
+  --acao: #000000;
+  --on-acao: #ffffff;
+  --foco: #0039b3;
+  --good: #005546;
+  --on-good: #ffffff;
+  --good-suave: #ffffff;
+  --ng: #8a2200;
+  --on-ng: #ffffff;
+  --ng-suave: #ffffff;
+  --check: #f0a800;
+  --on-check: #000000;
+  --check-tinta: #5e3a00;
+  --check-suave: #ffffff;
+  --alterado: #0039b3;
+  --on-alterado: #ffffff;
+  --cam-a: #0045b0;
+  --cam-b: #7f1d5c;
+  --cam-c: #5a3410;
+  --on-cam: #ffffff;
+  --veu: rgba(0,0,0,0.56);
+  --sombra-folha: none;
+  color-scheme: light;
+}
+[data-theme="noite"] {
+  --fundo: #000000;
+  --superficie: #000000;
+  --superficie-2: #141414;
+  --tinta: #e2e1da;
+  --tinta-2: #c8c8c0;
+  --tinta-3: #a6a69e;
+  --linha: #71716c;
+  --borda: #c8c8c0;
+  --acao: #e2e1da;
+  --on-acao: #000000;
+  --foco: #8fbaff;
+  --good: #5ce8c8;
+  --on-good: #000000;
+  --good-suave: #000000;
+  --ng: #ff9e75;
+  --on-ng: #000000;
+  --ng-suave: #000000;
+  --check: #ffc53d;
+  --on-check: #000000;
+  --check-tinta: #ffc53d;
+  --check-suave: #000000;
+  --alterado: #8fbaff;
+  --on-alterado: #000000;
+  --cam-a: #8fbaff;
+  --cam-b: #f7a8d6;
+  --cam-c: #ecbc8e;
+  --on-cam: #000000;
+  --veu: rgba(0,0,0,0.72);
+  --sombra-folha: none;
+  color-scheme: dark;
+}
+:root {
+  --espaco-1: 4px;
+  --espaco-2: 8px;
+  --espaco-3: 12px;
+  --espaco-4: 16px;
+  --espaco-5: 24px;
+  --espaco-6: 32px;
+  --espaco-7: 48px;
+  --espaco-8: 64px;
+  --raio-p: 6px;
+  --raio-m: 10px;
+  --raio-g: 16px;
+  --raio-pilula: 999px;
+  --alvo-min: 48px;
+  --alvo-padrao: 56px;
+  --alvo-primario: 72px;
+  --traco-fino: 1px;
+  --traco-controle: 2px;
+  --traco-forte: 3px;
+  --font-sans: "Atkinson Hyperlegible Next", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "Atkinson Hyperlegible Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+.display { font-family: var(--font-sans); font-size: 32px; line-height: 36px; font-weight: 800; letter-spacing: -0.01em; }
+.titulo { font-family: var(--font-sans); font-size: 24px; line-height: 30px; font-weight: 700; }
+.subtitulo { font-family: var(--font-sans); font-size: 20px; line-height: 26px; font-weight: 700; }
+.corpo { font-family: var(--font-sans); font-size: 17px; line-height: 24px; font-weight: 400; }
+.corpo-forte { font-family: var(--font-sans); font-size: 17px; line-height: 24px; font-weight: 700; }
+.apoio { font-family: var(--font-sans); font-size: 15px; line-height: 20px; font-weight: 400; }
+.rotulo { font-family: var(--font-sans); font-size: 13px; line-height: 16px; font-weight: 700; letter-spacing: 0.07em; }
+.selo { font-family: var(--font-sans); font-size: 14px; line-height: 16px; font-weight: 800; letter-spacing: 0.03em; }
+.take { font-family: var(--font-mono); font-size: 64px; line-height: 64px; font-weight: 700; }
+.numero-g { font-family: var(--font-mono); font-size: 40px; line-height: 44px; font-weight: 700; }
+.numero { font-family: var(--font-mono); font-size: 28px; line-height: 32px; font-weight: 700; }
+.valor { font-family: var(--font-mono); font-size: 20px; line-height: 26px; font-weight: 700; }
+.dado { font-family: var(--font-mono); font-size: 15px; line-height: 20px; font-weight: 400; }

@@ -13,9 +13,9 @@ import { useDays, dayLabel } from '../lib/days'
 export const SHOT_TYPES = ['PG', 'PC', 'PA', 'PM', 'PP', 'PPP', 'Detalhe', 'Insert', 'Plongée', 'Contra-plongée', 'Plano-sequência', 'Master']
 
 export const STATUS = {
-  good: { label: 'GOOD', cls: 'bg-good text-black border-good' },
-  ng: { label: 'NG', cls: 'bg-ng text-white border-ng' },
-  check: { label: 'CHECK', cls: 'bg-check text-black border-check' },
+  good: { label: 'GOOD', cls: 'bg-good text-on-good border-good' },
+  ng: { label: 'NG', cls: 'bg-ng text-on-ng border-ng' },
+  check: { label: 'CHECK', cls: 'bg-check text-on-check border-check-ink' },
 }
 
 export default function Scene() {

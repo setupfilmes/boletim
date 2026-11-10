@@ -67,7 +67,7 @@ export default function Day() {
         )}
         {list.length > 1 && canEdit && (
           <div className="mb-2 flex items-center justify-between">
-            <span className="font-mono text-xs uppercase tracking-widest text-muted">Ordem de gravação</span>
+            <span className="font-mono text-[13px] font-bold uppercase tracking-[.07em] text-muted">Ordem de gravação</span>
             <Btn size="sm" variant={reorder ? 'primary' : 'ghost'} onClick={() => setReorder(!reorder)} data-testid="reorder">
               {reorder ? 'Pronto' : 'Reordenar'}
             </Btn>
@@ -217,7 +217,7 @@ export function DayForm({ open, onClose, project, days, day, onCreated, onDelete
           <TextInput label="Data" type="date" value={f.date || ''} onChange={(e) => setF({ ...f, date: e.target.value })} data-testid="day-date" />
         </div>
         {day && f.date && f.date !== day.date && (
-          <p className="text-sm text-check">Os takes gravados nesta diária passam para a nova data.</p>
+          <p className="text-sm text-check-ink">Os takes gravados nesta diária passam para a nova data.</p>
         )}
         <TextArea label="Observações (ordem do dia, locação, chamada…)" rows={3} value={f.notes || ''} onChange={(e) => setF({ ...f, notes: e.target.value })} />
       </div>
