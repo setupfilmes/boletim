@@ -14,7 +14,7 @@ import { createNextTake, previewNextTake, addCameraToTake, deleteTakes, update, 
 import { projectFields, extraField, extraText, isEmpty, MARKS, formatTc } from '../lib/fields'
 import { groupTakes, isMulticam, projectCameras, linkedShots, shotCameras, shotLabel as labelOf } from '../lib/cameras'
 import { useAuth } from '../auth'
-import { fmtDate, fmtTime, joinFilters, vibrate, incrCode, todayISO } from '../lib/util'
+import { fmtDate, fmtTime, joinFilters, vibrate, incrCode, todayISO, nowISO } from '../lib/util'
 import { useDays, dayLabel, whenForDay } from '../lib/days'
 import { ShotForm } from './Scene'
 
@@ -125,10 +125,13 @@ export default function Shot() {
     const real = created.find((r) => r.shot_id === row.shot_id && (r.camera || null) === (row.camera || null)) || created[0]
     return fn(real)
   }
-  const setField = (row, field, value) => withRow(row, (r) => update('takes', r.id, { [field]: value }))
+  // Mudança feita na tela de um take já gravado (?take=N) marca "Corrigido às" (sai no boletim com *)
+  const stamp = (id) => (mode === 'take' ? updateExtra(id, 'corrigido_em', nowISO()) : null)
+  const setField = (row, field, value) => withRow(row, async (r) => { await update('takes', r.id, { [field]: value }); await stamp(r.id) })
+  const setExtra = (row, key, value) => withRow(row, async (r) => { await updateExtra(r.id, key, value); await stamp(r.id) })
   const setAll = async (field, value) => {
     const list = isDraft ? await materialize() : rows
-    for (const r of list) await update('takes', r.id, { [field]: value })
+    for (const r of list) { await update('takes', r.id, { [field]: value }); await stamp(r.id) }
   }
 
   // take anterior da mesma câmera (para a marca MUDOU)
@@ -358,7 +361,7 @@ export default function Shot() {
             onApply={(v) => {
               // ND: "Clear" sai quando algum ND de verdade é marcado junto
               if (ex?.key === 'nd_int' && Array.isArray(v) && v.length > 1) v = v.filter((x) => x !== 'Clear')
-              if (ex) withRow(row, (r) => updateExtra(r.id, ex.key, v))
+              if (ex) setExtra(row, ex.key, v)
               else setField(row, f.k, f.multi ? v || [] : v)
             }} />
         )
@@ -368,7 +371,7 @@ export default function Shot() {
         title={text && multi && text.row.camera ? ` · câmera ${text.row.camera}` : ''} readOnly={!canEdit}
         onSave={async (v) => {
           const { row, field } = text
-          if (field.startsWith('x:')) return withRow(row, (r) => updateExtra(r.id, field.slice(2), v || null))
+          if (field.startsWith('x:')) return setExtra(row, field.slice(2), v || null)
           await setField(row, field, v || null)
           // clipe corrigido (ex.: rec falso): oferece corrigir junto os clipes seguintes do mesmo rolo
           if (field === 'clip' && v && row.clip && v !== row.clip && !row._draft) {
@@ -483,7 +486,10 @@ function TakeEditSheet({ group, onClose, groups, onDeleted }) {
     const n = parseInt(num, 10)
     if (!(n > 0)) return notify('Número inválido', 'error')
     if (groups.some((g) => g.number === n && g.number !== group.number)) return notify(`O take ${n} já existe neste plano`, 'error')
-    for (const r of group.rows) await update('takes', r.id, { take_number: n, shoot_date: date || r.shoot_date })
+    for (const r of group.rows) {
+      await update('takes', r.id, { take_number: n, shoot_date: date || r.shoot_date })
+      await updateExtra(r.id, 'corrigido_em', nowISO())
+    }
     onClose()
   }
   const many = group.rows.length > 1

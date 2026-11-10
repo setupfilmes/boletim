@@ -7,6 +7,7 @@ import { createShot, deleteShot, update } from '../lib/repo'
 import { useAuth } from '../auth'
 import { nextCode, plural, uuid, fmtDate, todayISO } from '../lib/util'
 import { getDb } from '../lib/db'
+import { suggestShotCodes } from '../lib/ficha'
 import { Button, PlanoCard, Tag, EmptyState } from '../ds/components'
 import { groupTakes, isMulticam, projectCameras, linkedShots, shotCameras, shotLabel } from '../lib/cameras'
 import { SceneForm } from './Project'
@@ -136,7 +137,7 @@ export function ShotForm({ open, onClose, shot, scene, shots, project, onCreated
     if (open) {
       setF(shot
         ? { ...shot, cams: shotCameras(shot) || [], links: linkedShots(shot, shots).filter((s) => s.id !== shot.id).map((s) => s.id) }
-        : { code: nextCode(shots.map((s) => s.code)), shot_type: null, description: '', cams: [], links: [] })
+        : { code: suggestShotCodes(project, shots.map((s) => s.code))[0], shot_type: null, description: '', cams: [], links: [] })
     }
   }
   const toggle = (k, v) => setF((s) => ({ ...s, [k]: s[k].includes(v) ? s[k].filter((x) => x !== v) : [...s[k], v] }))
@@ -167,7 +168,7 @@ export function ShotForm({ open, onClose, shot, scene, shots, project, onCreated
     onClose()
   }
   const camIds = projectCameras(project).map((c) => c.id)
-  const chip = (on) => `min-h-11 rounded-lg border-2 px-3 font-display text-sm font-bold ${on ? 'border-accent bg-accent text-accent-ink' : 'border-line bg-surface2 text-ink'}`
+  const chip = (on) => `min-h-12 rounded-[10px] border-2 px-4 font-mono text-[17px] font-bold ${on ? 'border-accent bg-accent text-accent-ink' : 'border-borda bg-surface text-ink'}`
   return (
     <Sheet open={open} onClose={onClose} title={shot ? `Editar plano ${shot.code}` : `Novo plano — cena ${scene.number}`}
       footer={<div className="grid gap-2">
@@ -175,7 +176,16 @@ export function ShotForm({ open, onClose, shot, scene, shots, project, onCreated
         {shot && <Btn full variant="danger" onClick={remove}><IconTrash /> Excluir plano</Btn>}
       </div>}>
       <div className="grid gap-4">
-        <TextInput label="Plano (número ou letra)" value={f.code || ''} onChange={(e) => setF({ ...f, code: e.target.value })} />
+        <TextInput label="Nome do plano (como na claquete)" value={f.code || ''} onChange={(e) => setF({ ...f, code: e.target.value.toUpperCase() })}
+          hint={`Aparece como ${shotLabel(scene, { code: f.code || '?' })}. A numeração do projeto está na Ficha técnica.`} data-testid="shot-code" />
+        {!shot && (
+          <div className="flex flex-wrap gap-2" aria-label="Sugestões de nome">
+            {suggestShotCodes(project, shots.map((s) => s.code)).map((c) => (
+              <button type="button" key={c} onClick={() => setF({ ...f, code: c })} aria-pressed={f.code === c}
+                className={chip(f.code === c)}>{shotLabel(scene, { code: c })}</button>
+            ))}
+          </div>
+        )}
         <Field label="Enquadramento"><ChipSelect options={SHOT_TYPES} value={f.shot_type} onChange={(v) => setF({ ...f, shot_type: v })} /></Field>
         {multi && (
           <>

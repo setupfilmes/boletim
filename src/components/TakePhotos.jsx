@@ -87,6 +87,15 @@ function PhotoViewer({ photo, caption, canEdit, onClose, onDelete }) {
 }
 
 // Legenda / motivo: botão Salvar com confirmação visível. Se fechar sem salvar, salva mesmo assim e avisa.
+// Tipo da foto: vai no começo da legenda ("VFX · reflexo da janela") — aparece igual no PDF e na planilha
+const PHOTO_TYPES = ['Continuidade', 'VFX', 'Posição de câmera']
+const typeOf = (t) => PHOTO_TYPES.find((x) => t.startsWith(`${x} · `) || t === x) || null
+const withType = (t, type) => {
+  const cur = typeOf(t)
+  const rest = cur ? t.slice(cur.length).replace(/^ · /, '') : t
+  return type && type !== cur ? (rest ? `${type} · ${rest}` : type) : rest
+}
+
 function CaptionEditor({ photo }) {
   const { notify } = useDialog()
   const [text, setText] = useState(photo.caption || '')
@@ -107,6 +116,15 @@ function CaptionEditor({ photo }) {
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <div className="mt-3">
+      <div className="mb-2 flex flex-wrap gap-2" role="group" aria-label="Tipo da foto">
+        {PHOTO_TYPES.map((t) => {
+          const on = typeOf(text) === t
+          return (
+            <button key={t} type="button" aria-pressed={on} onClick={() => setText(withType(text, t))} data-testid="photo-type"
+              className={`min-h-12 rounded-[10px] border-2 px-4 text-[15px] font-bold ${on ? 'border-accent bg-accent text-accent-ink' : 'border-borda bg-surface text-ink'}`}>{t}</button>
+          )
+        })}
+      </div>
       <TextArea label="Legenda / motivo" rows={2} value={text} maxLength={500} onChange={(e) => setText(e.target.value)}
         placeholder="Por que esta foto? O que observar (continuidade, reflexo, marca, posição…)" data-testid="photo-caption" />
       <div className="mt-2">
