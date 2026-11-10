@@ -150,21 +150,14 @@ function takeRow(shot, inProject, number, camera, when) {
   }
 }
 
-// Novo take (próximo número da claquete). Retorna as linhas criadas — uma por câmera no multicâmera.
-// Câmeras de cada plano: as definidas no plano (shot.cameras); senão as que rodaram no take anterior do plano
-// (no 1º take, as do último take do projeto); sem histórico, todas as do projeto que nenhum plano vinculado reservou.
-// `linked` = planos que rodam juntos (mesmo link_id): todos recebem o mesmo número, cada um com suas câmeras.
-export async function createNextTake(shot, project, linked = [shot], at = null) {
+// Linhas do próximo take (uma por câmera; planos vinculados recebem o mesmo número), sem gravar nada.
+async function planNextTake(shot, project, linked, at) {
   const inProject = await projectTakes(shot.project_id)
   const ids = new Set(linked.map((s) => s.id))
   const inGroup = inProject.filter((t) => ids.has(t.shot_id))
   const last = inGroup.length ? Math.max(...inGroup.map((t) => t.take_number)) : 0
   const when = at || { date: todayISO(), at: nowISO() }
-  if (!isMulticam(project)) {
-    const rows = [await create('takes', takeRow(shot, inProject, last + 1, undefined, when))]
-    await ensureDays(shot.project_id)
-    return rows
-  }
+  if (!isMulticam(project)) return [takeRow(shot, inProject, last + 1, undefined, when)]
   const all = projectCameras(project).map((c) => c.id)
   const reserved = new Set(linked.flatMap((s) => shotCameras(s) || []))
   const out = []
@@ -179,10 +172,26 @@ export async function createNextTake(shot, project, linked = [shot], at = null) 
       if (!cams.length && s.id === shot.id) cams = all.filter((c) => !reserved.has(c))
       if (!cams.length && s.id === shot.id) cams = all
     }
-    for (const c of cams) out.push(await create('takes', takeRow(s, inProject, last + 1, c, when)))
+    for (const c of cams) out.push(takeRow(s, inProject, last + 1, c, when))
   }
-  await ensureDays(shot.project_id) // a cena entra (no fim) na pasta da diária, criando a diária se preciso
   return out.sort((a, b) => (a.shot_id === shot.id ? 0 : 1) - (b.shot_id === shot.id ? 0 : 1))
+}
+
+// Rascunho do próximo take (tela de registro): mostra os dados "grudados" sem criar o take.
+// O take só passa a existir no primeiro toque (status, campo, nota, foto ou Próximo) — sair sem tocar não deixa take vazio.
+export async function previewNextTake(shot, project, linked = [shot], at = null) {
+  return (await planNextTake(shot, project, linked, at)).map((r) => ({ ...r, id: `rascunho-${r.shot_id}-${r.camera || '-'}`, _draft: true }))
+}
+
+// Novo take (próximo número da claquete). Retorna as linhas criadas — uma por câmera no multicâmera.
+// Câmeras de cada plano: as definidas no plano (shot.cameras); senão as que rodaram no take anterior do plano
+// (no 1º take, as do último take do projeto); sem histórico, todas as do projeto que nenhum plano vinculado reservou.
+// `linked` = planos que rodam juntos (mesmo link_id): todos recebem o mesmo número, cada um com suas câmeras.
+export async function createNextTake(shot, project, linked = [shot], at = null) {
+  const out = []
+  for (const r of await planNextTake(shot, project, linked, at)) out.push(await create('takes', r))
+  await ensureDays(shot.project_id) // a cena entra (no fim) na pasta da diária, criando a diária se preciso
+  return out
 }
 
 // Inclui uma câmera num take que já existe (ela também rodou)

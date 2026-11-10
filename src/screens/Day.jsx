@@ -75,7 +75,10 @@ export function DayBody({ project, day, days, canEdit, onEditDay }) {
       {day.notes && <Banner tone="info" title="Ordem do dia">{day.notes}</Banner>}
       {list.length === 0 ? (
         <Empty icon="calendar-days" title={`Nenhuma cena no ${dayLabel(day.number)}`}
-          action={canEdit && <Btn onClick={() => setAdding(true)} data-testid="day-add-scene">Adicionar do roteiro</Btn>}>
+          action={canEdit && <div className="grid gap-2">
+            {scenes.length > 0 && <Btn onClick={() => setAdding(true)} data-testid="day-add-scene">Adicionar do roteiro</Btn>}
+            <Btn variant={scenes.length ? 'ghost' : 'primary'} onClick={() => setNewScene(true)} data-testid="day-new-scene">Cena nova</Btn>
+          </div>}>
           Escolha as cenas que serão gravadas. A ordem pode mudar depois. Ao gravar um take, a cena entra aqui sozinha.
         </Empty>
       ) : (

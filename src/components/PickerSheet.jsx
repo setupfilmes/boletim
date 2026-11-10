@@ -1,23 +1,25 @@
 import { useEffect, useState } from 'react'
 import { Btn, Sheet } from './ui'
+import { Icon, Stepper } from '../ds/components'
 import { addKitItem, update } from '../lib/repo'
 import { vibrate } from '../lib/util'
-import { IconPlus } from './icons'
 
 const NUMERIC = new Set(['iso', 'fps', 'tstop', 'focus'])
 
-// Gaveta inferior com botões grandes para escolher um valor sem teclado.
-// "Adicionar novo" aplica o valor e já salva no kit para as próximas vezes.
+// Gaveta com o seletor rápido do design system: chips grandes, o valor do take anterior marcado como "anterior",
+// "Outro" para digitar (salva no kit para as próximas vezes). T-Stop ganha os botões − / + (passo a passo).
 // persist=false: campos extras do projeto (não existem no kit; os valores já usados viram as opções).
 export default function PickerSheet({ open, onClose, title, category, value, multi, options, onApply, project, canEdit = true,
-  persist = true, numeric }) {
+  persist = true, numeric, anterior }) {
   const [sel, setSel] = useState([])
   const [draft, setDraft] = useState('')
+  const [typing, setTyping] = useState(false)
 
   useEffect(() => {
     if (open) {
-      setSel(multi ? (Array.isArray(value) ? value : []) : [])
+      setSel(multi ? (Array.isArray(value) ? value : value ? [value] : []) : [])
       setDraft('')
+      setTyping(false)
     }
   }, [open, multi, value])
 
@@ -38,12 +40,19 @@ export default function PickerSheet({ open, onClose, title, category, value, mul
       }
     }
     setDraft('')
+    setTyping(false)
     choose(v)
   }
 
   const list = [...options]
   // valor atual fora da lista (ex.: veio de outro aparelho) continua visível
   for (const v of multi ? sel : [value]) if (v && !list.includes(v)) list.push(v)
+  const prevVals = [].concat(anterior ?? [])
+  const stepIdx = list.indexOf(value)
+  const step = (d) => {
+    const i = stepIdx < 0 ? 0 : Math.min(list.length - 1, Math.max(0, stepIdx + d))
+    if (list[i] && list[i] !== value) { vibrate(); onApply(list[i]) }
+  }
 
   return (
     <Sheet open={open} onClose={onClose} title={title}
@@ -51,32 +60,44 @@ export default function PickerSheet({ open, onClose, title, category, value, mul
         <div className="grid grid-cols-3 gap-3">
           <Btn variant="ghost" onClick={() => setSel([])}>Limpar</Btn>
           <Btn className="col-span-2" onClick={() => { onApply(sel); onClose() }}>
-            Aplicar{sel.length ? ` (${sel.length})` : ''}
+            Pronto{sel.length ? ` (${sel.length})` : ''}
           </Btn>
         </div>
       ) : (
-        <Btn variant="ghost" full onClick={() => { onApply(null); onClose() }}>Limpar campo</Btn>
+        <div className="grid grid-cols-3 gap-3">
+          <Btn variant="ghost" onClick={() => { onApply(null); onClose() }}>Limpar</Btn>
+          <Btn className="col-span-2" onClick={onClose}>Pronto</Btn>
+        </div>
       )}>
-      <div className="grid grid-cols-3 gap-2 md:grid-cols-5" data-testid="picker-options">
+      {category === 'tstop' && !multi && list.length > 1 && (
+        <div className="mb-3"><Stepper value={value || '—'} onPrev={() => step(-1)} onNext={() => step(1)} /></div>
+      )}
+      <div className="bc-qp__lista" data-testid="picker-options" role="listbox" aria-label={title}>
         {list.map((v) => {
           const on = multi ? sel.includes(v) : v === value
           return (
-            <button key={v} onClick={() => choose(v)}
-              className={`min-h-16 rounded-xl border-2 px-1 font-mono text-lg font-medium leading-tight break-words ${
-                on ? 'border-accent bg-accent text-accent-ink' : 'border-line bg-surface2 text-ink active:border-accent'}`}>
-              {v}
+            <button key={v} type="button" role="option" aria-selected={on} onClick={() => choose(v)} className={`bc-chip${on ? ' is-on' : ''}`}>
+              <span>{v}</span>
+              {prevVals.includes(v) && <span className="bc-chip__nota">anterior</span>}
             </button>
           )
         })}
-        {!list.length && <div className="col-span-3 py-4 text-center text-sm text-muted">Nenhum item no kit. Adicione abaixo.</div>}
+        {!typing && (
+          <button type="button" className="bc-chip bc-chip--outro" onClick={() => setTyping(true)} data-testid="picker-other">
+            <Icon name="pencil" size={20} /><span>Outro</span>
+          </button>
+        )}
       </div>
-      <div className="mt-4 flex gap-2">
-        <input value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="Adicionar novo…"
-          inputMode={numeric ?? NUMERIC.has(category) ? 'decimal' : 'text'}
-          onKeyDown={(e) => e.key === 'Enter' && addNew()}
-          className="min-h-14 min-w-0 flex-1 rounded-xl border-2 border-line bg-bg px-3 text-ink outline-none focus:border-accent" />
-        <Btn onClick={addNew} disabled={!draft.trim()} aria-label="Adicionar"><IconPlus /></Btn>
-      </div>
+      {!list.length && !typing && <div className="py-3 text-center text-[15px] text-muted">Nenhum item no kit. Toque em Outro para digitar.</div>}
+      {typing && (
+        <div className="mt-4 flex gap-2">
+          <input value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="Digite o valor…" autoFocus
+            inputMode={numeric ?? NUMERIC.has(category) ? 'decimal' : 'text'}
+            onKeyDown={(e) => e.key === 'Enter' && addNew()} aria-label="Outro valor"
+            className="min-h-14 min-w-0 flex-1 rounded-[10px] border-2 border-borda bg-surface px-3 font-mono text-xl text-ink outline-none focus:border-ink" />
+          <Btn onClick={addNew} disabled={!draft.trim()}>Usar</Btn>
+        </div>
+      )}
     </Sheet>
   )
 }
