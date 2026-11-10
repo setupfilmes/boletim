@@ -399,7 +399,7 @@ const DIT_COLS = [
   ['lens', (r) => r.lens], ['tStop', (r) => r.tstop], ['focus', (r) => r.focus], ['filters', (r) => r.filters],
   ['iso', (r) => r.iso], ['shutter', (r) => r.shutter], ['fps', (r) => r.fps], ['whiteBalance', (r) => r.wb],
   ['timecode', (r) => r.extra.tc_in || ''], ['timecodeOut', (r) => r.extra.tc_out || ''],
-  ['ndInternal', (r) => r.extra.nd_int || ''], ['lut', (r) => r.extra.lut || ''], ['codec', (r) => r.extra.codec || ''],
+  ['ndInternal', (r) => extraText(null, r.extra.nd_int)], ['lut', (r) => r.extra.lut || ''], ['codec', (r) => r.extra.codec || ''],
   ['resolution', (r) => r.extra.resolution || ''], ['unit', (r) => r.extra.unit || ''], ['lensHeight', (r) => r.extra.lens_height || ''],
   ['tilt', (r) => r.extra.tilt || ''], ['distance', (r) => r.extra.distance || ''], ['vfx', (r) => [].concat(r.extra.vfx || []).join(' + ')],
   ['multicam', (r) => r.multicam], ['shootingDate', (r) => r.isoDate], ['recordedAt', (r) => r.time], ['comment', (r) => r.notes],

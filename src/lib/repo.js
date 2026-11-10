@@ -267,6 +267,31 @@ export function sortKit(items) {
   return [...items].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0) || natCompare(a.value, b.value))
 }
 
+// Rec falso / clipe pulado: ao corrigir o clipe de um take (A001C005 → A001C006), os takes gravados DEPOIS dele
+// no mesmo rolo e mesma câmera (em qualquer plano) recebem a mesma diferença. Só clipes no mesmo formato
+// (mesmo prefixo) entram. Devolve null se não há o que corrigir; senão { delta, list: [{ from, to }], apply }.
+export async function planClipShift(take, oldClip, newClip) {
+  const parse = (c) => { const m = String(c || '').match(/^(.*?)(\d+)(\D*)$/); return m ? { pre: m[1], n: Number(m[2]), w: m[2].length, suf: m[3] } : null }
+  const a = parse(oldClip)
+  const b = parse(newClip)
+  if (!a || !b || a.pre !== b.pre || a.suf !== b.suf || a.n === b.n) return null
+  const delta = b.n - a.n
+  const when = (t) => String(t.recorded_at || t.created_at || '')
+  const later = (await projectTakes(take.project_id)).filter((t) => t.id !== take.id
+    && (t.camera || null) === (take.camera || null) && (t.roll || null) === (take.roll || null)
+    && when(t) > when(take) && parse(t.clip)?.pre === a.pre && parse(t.clip)?.suf === a.suf)
+    .sort((x, y) => when(x).localeCompare(when(y)))
+  if (!later.length) return null
+  const list = later.map((t) => {
+    const p = parse(t.clip)
+    return { id: t.id, from: t.clip, to: `${p.pre}${String(Math.max(0, p.n + delta)).padStart(p.w, '0')}${p.suf}` }
+  })
+  return {
+    delta, list,
+    apply: async () => { for (const x of list) await update('takes', x.id, { clip: x.to }) },
+  }
+}
+
 // Grava um campo extra do take (takes.extra é um objeto; lê a versão atual para não perder outro campo)
 export async function updateExtra(id, key, value) {
   const cur = await getDb().takes.get(id)

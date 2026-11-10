@@ -23,7 +23,8 @@ export const markFull = (k) => { const m = MARKS.find((x) => x.key === k); retur
 export const EXTRA_FIELDS = [
   { key: 'tc_in', label: 'TC in', group: 'Timecode', input: 'tc' },
   { key: 'tc_out', label: 'TC out', group: 'Timecode', input: 'tc' },
-  { key: 'nd_int', label: 'ND interno', short: 'ND int', group: 'Câmera', input: 'pick', sticky: true,
+  // ND: dá para marcar mais de um (ex.: interno 1.2 + 0.6) — valores antigos de um ND só (texto) continuam valendo
+  { key: 'nd_int', label: 'ND interno', short: 'ND int', group: 'Câmera', input: 'multi', sticky: true,
     presets: ['Clear', '0.3', '0.6', '0.9', '1.2', '1.5', '1.8', '2.1', '2.4'] },
   { key: 'lut', label: 'LUT', group: 'Câmera', input: 'pick', sticky: true, perCamera: true,
     presets: ['Rec709', 'K1S1', 'LogC4 to Rec709', 'S-Log3 to 709', 'Show LUT'] },

@@ -6,7 +6,7 @@ import PickerSheet from '../components/PickerSheet'
 import TakePhotos from '../components/TakePhotos'
 import { useTakePhotos } from '../lib/photos'
 import { useProject, useScene, useShot, useTakesByShots, useTakesByProject, useKit, useRole, kitOptions, useShots } from '../lib/hooks'
-import { createNextTake, addCameraToTake, deleteTakes, update, updateExtra } from '../lib/repo'
+import { createNextTake, addCameraToTake, deleteTakes, update, updateExtra, planClipShift } from '../lib/repo'
 import { projectFields, extraField, extraText, isEmpty, MARKS, SOUND, markCode, formatTc } from '../lib/fields'
 import { groupTakes, isMulticam, projectCameras, cameraOrder, linkedShots, shotCameras, shotLabel } from '../lib/cameras'
 import { useAuth } from '../auth'
@@ -57,7 +57,7 @@ export default function Shot() {
   const photosOf = (id) => photos.filter((p) => p.take_id === id)
   const { user } = useAuth()
   const canEdit = useRole(project, user?.id) !== 'viewer'
-  const { notify } = useDialog()
+  const { notify, confirm } = useDialog()
   const [openNum, setOpenNum] = useState(null)
   const [cam, setCam] = useState(null) // câmera selecionada nas abas (multicâmera)
   const [picker, setPicker] = useState(null) // { take, field }
@@ -108,7 +108,9 @@ export default function Shot() {
     const used = (allTakes || []).flatMap((t) => [].concat(t.extra?.[f.key] ?? []))
     return [...new Set([...f.presets, ...used])]
   }
-  const pickerValue = !picker ? null : pExtra ? picker.take.extra?.[pExtra.key] ?? (pf.multi ? [] : null) : picker.take[picker.field]
+  const rawPick = !picker ? null : pExtra ? picker.take.extra?.[pExtra.key] ?? (pf.multi ? [] : null) : picker.take[picker.field]
+  // campo que virou múltiplo (ex.: ND) e tinha um valor só gravado como texto
+  const pickerValue = pf?.multi && rawPick != null && !Array.isArray(rawPick) ? [rawPick] : rawPick
   const openExtra = (take, f) => (f.input === 'tc' ? setText({ take, field: `x:${f.key}` }) : setPicker({ take, field: `x:${f.key}` }))
   // sugestões de cartão/clipe olham só a mesma câmera
   const textTakes = (takes || []).filter((t) => !multi || !text || (t.camera || null) === (text.take.camera || null))
@@ -186,6 +188,8 @@ export default function Shot() {
         multi={pf?.multi} value={pickerValue} persist={!pf?.extra} numeric={pf?.extra?.numeric}
         options={pf ? (pf.extra ? extraOptions(pf.extra) : kitOptions(kit, project, pf.cat)) : []} project={project} canEdit={canEdit}
         onApply={(v) => {
+          // ND: "Clear" sai quando algum ND de verdade é marcado junto
+          if (pf.extra?.key === 'nd_int' && Array.isArray(v) && v.length > 1) v = v.filter((x) => x !== 'Clear')
           if (pf.extra) updateExtra(picker.take.id, pf.extra.key, v)
           else setField(picker.take, picker.field, pf.multi ? v || [] : v)
           if (!pf.multi && v) notify(`${pf.label}: ${v}`)
@@ -193,7 +197,23 @@ export default function Shot() {
 
       <TextSheet state={text} onClose={() => setText(null)} takes={textTakes}
         title={text && multi && text.take.camera ? ` — Cam ${text.take.camera}` : ''}
-        onSave={(v) => (xKey(text.field) ? updateExtra(text.take.id, xKey(text.field), v || null) : setField(text.take, text.field, v || null))} />
+        onSave={async (v) => {
+          if (xKey(text.field)) return updateExtra(text.take.id, xKey(text.field), v || null)
+          const take = text.take
+          await setField(take, text.field, v || null)
+          // clipe corrigido (ex.: rec falso): oferece corrigir junto os clipes seguintes do mesmo rolo
+          if (text.field === 'clip' && v && take.clip && v !== take.clip) {
+            const shift = await planClipShift(take, take.clip, v)
+            if (shift && await confirm({ title: 'Corrigir os clipes seguintes?', confirmLabel: `Corrigir ${shift.list.length}`,
+              message: `Há ${shift.list.length} ${shift.list.length === 1 ? 'clipe gravado depois' : 'clipes gravados depois'} deste no rolo ${take.roll || ''}${multi && take.camera ? ` (Cam ${take.camera})` : ''}.\n`
+                + `Somar ${shift.delta > 0 ? '+' : ''}${shift.delta} em todos? (rec falso / clipe pulado)\n\n`
+                + shift.list.slice(0, 4).map((x) => `${x.from} → ${x.to}`).join('\n')
+                + (shift.list.length > 4 ? `\n… até ${shift.list.at(-1).from} → ${shift.list.at(-1).to}` : '') })) {
+              await shift.apply()
+              notify(`${shift.list.length} ${shift.list.length === 1 ? 'clipe corrigido' : 'clipes corrigidos'}`)
+            }
+          }
+        }} />
 
       <TakeEditSheet group={editGroup} onClose={() => setEditGroup(null)} groups={groups} />
       <ShotForm open={editShot} onClose={() => setEditShot(false)} shot={shot} scene={scene} shots={shots || []} project={project} />
