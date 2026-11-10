@@ -297,3 +297,35 @@ a demonstração "Noite Adentro", `src/lib/demo.js`). Reescrever esses passos an
 - Cloudflare Pages: produção do projeto = ramo `dev`; build `npm run build`; saída `dist`; variáveis `APP_ENV=test`,
   `NODE_VERSION=22`. Supabase Auth → Redirect URLs precisa ter `https://boletim-dev.pages.dev/**` (confirmação de
   e-mail e nova senha voltam para o ambiente onde foram pedidas: `emailRedirectTo`/`redirectTo` = origem atual).
+
+## Redesign do Claude Design (ramo dev, 10/11/2026)
+
+Origem: design system "Boletim de Câmera" (https://claude.ai/artifact/HA9tfeWAV2tVzT1bTrH96Y — README, navegação,
+fluxos, tokens) e protótipo (https://claude.ai/artifact/B4A9V29rLeUegNxszQ6wno). Backup antes: tags `antes-redesign`
+(dev) e `producao-antes-redesign` (main). Feito em 5 commits no `dev`:
+1. **Visual** — `src/ds/`: `tokens.css` (4 temas em `<html data-theme="claro|escuro|sol|noite">`; padrão escuro; antigos
+   dark/sun migram), fontes Atkinson Hyperlegible (Next + Mono) empacotadas, `bundle.css` (classes `bc-*`, em
+   `@layer components` — sem a camada o `button{color:inherit}` dele apagava as cores do Tailwind), `components.jsx`
+   (componentes do DS em React: Button, StatusPicker, TakeNumber, FieldTile, CenaCard, PlanoCard, TakeRow, TabBar…),
+   `overrides.css` (ajustes nossos; não editar bundle.css para poder atualizar do Claude Design — ex.: `.bc-sr`
+   absoluto vazava das fileiras roláveis e alargava a página). Nomes antigos do Tailwind (bg, surface, ink, accent,
+   muted…) apontam para os tokens; `text-check` virou `text-check-ink` (âmbar só como preenchimento).
+2. **Navegação** — Projetos (`ProjetoCard`, hoje primeiro) → projeto com `TabBar` Hoje · Diárias · Roteiro · Relatórios
+   (`?tab=`); menu ⋮: ficha (`/p/:id/ficha`), equipe (`/p/:id/equipe`), tema. Hoje = `DayBody` da diária de hoje
+   (cria com 1 toque). Cena = `PlanoCard` por plano (últimos takes em chips, "Gravar N", "Todos os N takes").
+3. **Registro** (`Shot.jsx`) — modos: registro (padrão), `?take=N` (conferir/corrigir), `?lista=1`. O take do registro
+   é **rascunho** (`previewNextTake`) até o 1º toque: status/circular/campo/nota/foto/Próximo chamam `materialize()`
+   (`createNextTake`, uma vez só) — sair sem tocar não cria take vazio. Rodapé fixo (GOOD/NG/CHECK + "Próximo · Take
+   N+1"), grade `FieldTile` com MUDOU (vs. take anterior da mesma câmera), abas `CameraTabs`, "Usar em todas", selo
+   "Take N salvo no aparelho" com "Corrigir". Som e claquete valem para todas as câmeras do take.
+4. **Ficha técnica** (`ProjectPages.jsx`, `lib/ficha.js`) — salva a cada campo; novos dados em `project.kit.ficha`
+   (codigo, ano, video_assist, codec, resolucao, fps, aspect, cor, lut), `kit.cameras[].serial`, `kit.numeracao`
+   (cena | numeros | letras → só muda a sugestão de nome do plano). Sem mudança de banco. Mudança feita em `?take=N` ou
+   na tabela do computador grava `takes.extra.corrigido_em` → "Corrigido às" na tela, `*` na hora do PDF (com legenda),
+   coluna "Corrigido em" na planilha. Tipo de foto (Continuidade/VFX/Posição de câmera) = prefixo da legenda.
+   PDF: cabeçalho com ano/código, linha "Câmeras" (com nº de série) e "Formato"; CSV DIT ganha `cameraSerial` e usa
+   LUT/codec/resolução da ficha quando o take não tem.
+5. **Computador** (`Desk.jsx`, ≥ 1024 px via `matchMedia`) — 3 colunas: lateral (projeto, sincronização, navegação,
+   diárias, tema) · cenas da diária/roteiro · cena com abas de planos e tabela de takes editável (clique/Enter edita,
+   Enter salva e desce, Tab direita, Esc cancela; status G/N/C; claquete por siglas; filtros separados por +).
+   Ainda não feito: seleção múltipla na tabela, mover takes entre planos, arrastar cenas (reordenar é por Subir/Descer).

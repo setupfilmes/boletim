@@ -8,10 +8,24 @@ import { createScene, createScenesBatch, deleteScene, update } from '../lib/repo
 import { useAuth } from '../auth'
 import { fmtDate, plural, todayISO } from '../lib/util'
 import Reports from './Reports'
+import Desk from './Desk'
 import ThemePicker from '../components/ThemePicker'
 import { DayForm, DayBody, weekday } from './Day'
 import { useDays, ensureDays, dayLabel, createDay } from '../lib/days'
 import { statsByScene, sceneCardProps } from '../lib/stats'
+
+// Tela larga (≥ 1024 px): layout de computador
+function useWide() {
+  const q = '(min-width: 1024px)'
+  const [wide, setWide] = useState(() => typeof matchMedia !== 'undefined' && matchMedia(q).matches)
+  useEffect(() => {
+    const m = matchMedia(q)
+    const on = () => setWide(m.matches)
+    m.addEventListener('change', on)
+    return () => m.removeEventListener('change', on)
+  }, [])
+  return wide
+}
 
 export const INT_EXT = ['INT', 'EXT', 'INT/EXT']
 export const PERIODS = ['DIA', 'NOITE', 'AMANHECER', 'ENTARDECER']
@@ -38,6 +52,7 @@ export default function Project() {
   // diárias que surgiram de takes gravados viram linhas de verdade (para reordenar e sincronizar)
   useEffect(() => { if (project && canEdit) ensureDays(project.id) }, [project?.id, canEdit]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  const wide = useWide()
   const legacy = params.get('tab')
   if (legacy === 'info') return <Navigate to={`/p/${projectId}/ficha`} replace />
   if (legacy === 'equipe') return <Navigate to={`/p/${projectId}/equipe`} replace />
@@ -47,6 +62,9 @@ export default function Project() {
   if (!project || project.deleted) {
     return (<><TopBar title="Projeto" back="/" /><Empty title="Projeto não encontrado">Ele pode ter sido excluído.</Empty></>)
   }
+
+  // computador: três colunas (lateral · cenas · plano com a tabela de takes)
+  if (wide) return <Desk project={project} canEdit={canEdit} role={role} />
 
   return (
     <>

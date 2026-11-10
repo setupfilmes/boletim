@@ -6,3 +6,5 @@
 /* textos só para leitor de tela (.bc-sr, position absolute) não podem escapar das fileiras roláveis */
 .bc-pcard__takes, .bc-camtabs, .bc-qp__lista, .bc-badge, .bc-sync { position: relative; }
 .bc-sr { top: 0; left: 0; }
+/* indicador completo dentro de colunas estreitas (lateral do computador) quebra linha em vez de vazar */
+.desk-sync .bc-sync { max-width: 100%; height: auto; min-height: var(--alvo-min); white-space: normal; text-align: left; }
