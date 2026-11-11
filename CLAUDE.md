@@ -332,7 +332,12 @@ fluxos, tokens) e protótipo (https://claude.ai/artifact/B4A9V29rLeUegNxszQ6wno)
 5. **Computador** (`Desk.jsx`, ≥ 1024 px via `matchMedia`) — 3 colunas: lateral (projeto, sincronização, navegação,
    diárias, tema) · cenas da diária/roteiro · cena com abas de planos e tabela de takes editável (clique/Enter edita,
    Enter salva e desce, Tab direita, Esc cancela; status G/N/C; claquete por siglas; filtros separados por +).
-   Ainda não feito: seleção múltipla na tabela, mover takes entre planos, arrastar cenas (reordenar é por Subir/Descer).
+   Ainda não feito: seleção múltipla na tabela, mover takes entre planos.
+   **Arrastar cenas (11/11/2026):** a alça ⠿ do `CenaCard` (prop `alca`) arrasta para mudar a ordem de gravação da
+   diária — `lib/useDragReorder.js` (Pointer Events: dedo, mouse e caneta; ↑/↓ com a alça focada; os outros cartões abrem
+   espaço; rola sozinho perto da borda; mostra a ordem nova na hora) + `reorderDay(day, ids)` em `days.js`. Vale na
+   diária/Hoje (`DayBody`) e na coluna de cenas do computador (`Desk`, só fora do Roteiro). Subir/Descer/Tirar continuam
+   em "Reordenar".
 
 ## Continuidade e importação do Resolve (ramo `continuidade`, 11/11/2026)
 

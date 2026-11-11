@@ -4,7 +4,8 @@ import { TopBar, Btn, Empty, Sheet, TextInput, TextArea, IconBtn, useDialog } fr
 import { IconEdit, IconTrash } from '../components/icons'
 import { Button, CenaCard, Banner } from '../ds/components'
 import { useProject, useRole, useScenes, useShotsByProject, useTakesByProject } from '../lib/hooks'
-import { useDays, dayLabel, addScenesToDay, removeSceneFromDay, moveSceneInDay, createDay, updateDay, deleteDay } from '../lib/days'
+import { useDays, dayLabel, addScenesToDay, removeSceneFromDay, moveSceneInDay, reorderDay, createDay, updateDay, deleteDay } from '../lib/days'
+import { useDragReorder } from '../lib/useDragReorder'
 import { buildPdf, shareFile } from '../lib/export'
 import { useAuth } from '../auth'
 import { statsByScene, sceneCardProps } from '../lib/stats'
@@ -57,7 +58,10 @@ export function DayBody({ project, day, days, canEdit, onEditDay }) {
 
   const sceneById = useMemo(() => Object.fromEntries((scenes || []).map((s) => [s.id, s])), [scenes])
   const stats = useMemo(() => statsByScene(takes, shots, day.date), [takes, shots, day.date])
-  const list = day.scenes.filter((s) => sceneById[s.scene_id])
+  const visible = day.scenes.filter((s) => sceneById[s.scene_id])
+  // Arrastar pela alça ⠿ muda a ordem de gravação (os botões Subir/Descer continuam em "Reordenar")
+  const drag = useDragReorder(visible.map((s) => s.scene_id), (ids) => reorderDay(day, ids).catch((e) => notify(e.message, 'error')), { disabled: !canEdit })
+  const list = drag.list.map((id) => visible.find((s) => s.scene_id === id)).filter(Boolean)
   const others = (sid) => days.filter((d) => d.id !== day.id && d.scenes.some((x) => x.scene_id === sid)).map((d) => dayLabel(d.number))
   const total = list.reduce((n, ds) => n + (stats[ds.scene_id]?.takes || 0), 0)
 
@@ -100,8 +104,8 @@ export function DayBody({ project, day, days, canEdit, onEditDay }) {
               const st = stats[s.id]
               const o = others(s.id)
               return (
-                <div key={ds.id} className="grid gap-1.5">
-                  <CenaCard {...sceneCardProps(s)} arrastavel={canEdit} ordem={i + 1}
+                <div key={ds.id} className="grid gap-1.5" ref={drag.itemRef(s.id)} style={drag.itemStyle(s.id)}>
+                  <CenaCard {...sceneCardProps(s)} arrastavel={canEdit} ordem={i + 1} alca={drag.handleProps(s.id)}
                     planos={st?.planos || 0} takes={st?.takes || 0} circulados={st?.circulados || 0}
                     naoGravada={!st} outrosDias={o.length ? o.join(', ') : undefined}
                     onPress={() => !reorder && nav(`/p/${project.id}/s/${s.id}?dia=${day.id}`)} />

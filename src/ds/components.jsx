@@ -344,7 +344,7 @@ export function DiariaCard({ dia, data, cenas = 0, takes = 0, hoje, sync, onPres
   );
 }
 
-export function CenaCard({ ordem, numero, intExt, diaNoite, locacao, descricao, planos, takes, circulados, outrosDias, naoGravada, arrastavel, selecionada, onPress }) {
+export function CenaCard({ ordem, numero, intExt, diaNoite, locacao, descricao, planos, takes, circulados, outrosDias, naoGravada, arrastavel, alca, selecionada, onPress }) {
   const sel = selecionada !== undefined;
   return (
     <div className={cx('bc-card', 'bc-cena', naoGravada && 'is-pendente', selecionada && 'is-selecionada')}>
@@ -354,7 +354,7 @@ export function CenaCard({ ordem, numero, intExt, diaNoite, locacao, descricao, 
         </span>
       )}
       {arrastavel && (
-        <span className="bc-cena__alca" aria-label="Arrastar para reordenar" role="button" tabIndex={0}>
+        <span className="bc-cena__alca" aria-label="Arrastar para reordenar (ou ↑/↓)" role="button" tabIndex={0} {...alca}>
           <Icon name="grip-vertical" size={24} />
           {ordem != null && <span className="bc-cena__ordem">{ordem}º</span>}
         </span>

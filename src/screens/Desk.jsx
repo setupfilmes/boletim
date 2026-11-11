@@ -6,7 +6,8 @@ import SyncBadge from '../components/SyncBadge'
 import TakePhotos from '../components/TakePhotos'
 import ThemePicker from '../components/ThemePicker'
 import { useScenes, useShotsByProject, useTakesByProject } from '../lib/hooks'
-import { useDays, dayLabel } from '../lib/days'
+import { useDays, dayLabel, reorderDay } from '../lib/days'
+import { useDragReorder } from '../lib/useDragReorder'
 import { useTakePhotos } from '../lib/photos'
 import { update, updateExtra } from '../lib/repo'
 import { groupTakes, isMulticam, linkedShots, shotLabel } from '../lib/cameras'
@@ -43,7 +44,11 @@ export default function Desk({ project, canEdit, role }) {
   const day = (days || []).find((d) => d.id === params.get('dia')) || (days || []).find((d) => d.date === today)
     || [...(days || [])].sort((a, b) => String(b.date).localeCompare(String(a.date)))[0] || null
   const sceneById = useMemo(() => Object.fromEntries((scenes || []).map((s) => [s.id, s])), [scenes])
-  const colScenes = view === 'roteiro' ? scenes || [] : (day?.scenes || []).map((x) => sceneById[x.scene_id]).filter(Boolean)
+  const baseScenes = view === 'roteiro' ? scenes || [] : (day?.scenes || []).map((x) => sceneById[x.scene_id]).filter(Boolean)
+  // Arrastar pela alça ⠿ muda a ordem de gravação da diária (no Roteiro não tem ordem para arrastar)
+  const canDrag = canEdit && view !== 'roteiro' && !!day
+  const drag = useDragReorder(baseScenes.map((s) => s.id), (ids) => reorderDay(day, ids), { disabled: !canDrag })
+  const colScenes = drag.list.map((id) => baseScenes.find((s) => s.id === id)).filter(Boolean)
   const scene = sceneById[params.get('cena')] || colScenes[0] || null
   const sceneShots = (shots || []).filter((s) => s.scene_id === scene?.id).sort((a, b) => String(a.code).localeCompare(String(b.code), 'pt-BR', { numeric: true }))
   const shot = sceneShots.find((s) => s.id === params.get('plano')) || sceneShots[0] || null
@@ -112,8 +117,8 @@ export default function Desk({ project, canEdit, role }) {
               {colScenes.map((s, i) => {
                 const st = stats[s.id]
                 return (
-                  <div key={s.id} className={scene?.id === s.id ? 'rounded-2xl outline outline-[3px] outline-ink' : ''}>
-                    <CenaCard {...sceneCardProps(s)} arrastavel={view !== 'roteiro'} ordem={i + 1} naoGravada={!st}
+                  <div key={s.id} className={scene?.id === s.id ? 'rounded-2xl outline outline-[3px] outline-ink' : ''} ref={drag.itemRef(s.id)} style={drag.itemStyle(s.id)}>
+                    <CenaCard {...sceneCardProps(s)} arrastavel={canDrag} ordem={i + 1} naoGravada={!st} alca={drag.handleProps(s.id)}
                       planos={st?.planos || 0} takes={st?.takes || 0} circulados={st?.circulados || 0}
                       onPress={() => go({ cena: s.id, plano: null })} />
                   </div>

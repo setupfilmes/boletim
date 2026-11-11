@@ -192,6 +192,15 @@ export async function moveSceneInDay(day, sceneId, dir) {
   await materializeDay(day, list)
 }
 
+// Nova ordem de gravação (arrastar): ids das cenas na ordem nova. Cenas da diária que não vieram na lista
+// (ex.: cena excluída do roteiro) ficam no fim, na ordem de antes.
+export async function reorderDay(day, sceneIds) {
+  const byScene = new Map(day.scenes.map((s) => [s.scene_id, s]))
+  const list = sceneIds.map((id) => byScene.get(id)).filter(Boolean)
+  const rest = day.scenes.filter((s) => !sceneIds.includes(s.scene_id))
+  await materializeDay(day, [...list, ...rest])
+}
+
 // Data e hora para um take novo criado dentro de uma diária (registro depois do dia usa a data da diária)
 export function whenForDay(day, today, now = new Date()) {
   if (!day || day.date === today) return null
