@@ -426,6 +426,17 @@ Conexão direta (Web Bluetooth), sem o app da Blackmagic. Protocolo traduzido do
   - Fluxo: abrir o take manda cena/take para a câmera → REC cria o take (TC in, hora, dados da câmera) → CORTA preenche
     TC out e duração → GOOD/NG marca o good take na câmera (vale para o último clipe) → Próximo manda o take seguinte.
     Clipes que rodaram sem conexão: o app avisa e cria os takes com um toque (sem TC).
+  - **Fase 1 feita (11/11/2026, falta testar com a câmera):** `src/lib/bmd/session.js` (ligado por `CameraSession` em
+    App.jsx, só com conta aberta) escuta as gravações do `link.js`: REC → usa o take que a tela já criou e ainda não teve
+    REC (`setOpenTake`) ou `createNextTake` no último plano aberto (`setContext`, salvo em `boletim.bt.context`); grava
+    `cameraFields()` (iso/shutter/fps/wb + extra.codec/resolution) e `extra.tc_in` + `extra.bt_rec` (id da gravação).
+    CORTA → `extra.tc_out` e `duration` (pelo TC; só se vazio). Gravação vira take uma vez só (`boletim.bt.done`;
+    as que já estavam na lista ao abrir o app são ignoradas). `syncSlate(label, n)` manda cena + nº do take que o
+    próximo REC vai criar (n+1 se o take mostrado já teve REC); `statusChanged` manda good take só para o take do
+    último REC. Clipes sem conexão ficam em `boletim.bt.gaps` → "Criar N takes" (`extra.bt_offline`, sem TC).
+    Tela do take: `components/CameraBtBar.jsx` (conectar, TC/REC ao vivo, letra da câmera no multicâmera, clipes sem
+    conexão), linha "TC in → out · duração" e "● REC" no cabeçalho do take; a tela pula para o take criado pelo REC.
+    Multicâmera: a letra da câmera Bluetooth fica em `boletim.bt.letter` por projeto (uma câmera por vez, por enquanto).
   - Ordem: 1) uma câmera na tela do take; 2) multicâmera; 3) "Conferir cartão" casando também pelo TC de início;
     4) app de iPhone (Capacitor).
 - **iPhone/iPad:** nenhum navegador tem Web Bluetooth. Caminho: app com Capacitor + plugin BLE (trocar só `link.js`).

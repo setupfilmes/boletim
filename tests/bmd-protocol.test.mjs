@@ -3,7 +3,7 @@
 // Rodar: node --test tests/bmd-protocol.test.mjs
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { buildCommand, parseMessages, decodeValue, applyMessage, parseTimecode, detectGap, TYPE, cmd, toHex, fromHex } from '../src/lib/bmd/protocol.js'
+import { buildCommand, parseMessages, decodeValue, applyMessage, parseTimecode, detectGap, cameraFields, tcDuration, TYPE, cmd, toHex, fromHex } from '../src/lib/bmd/protocol.js'
 
 const apply = (state, hex) => parseMessages(fromHex(hex)).reduce(applyMessage, state)
 
@@ -106,4 +106,28 @@ test('descobre o que rodou sem conexão pelo nº do take e pelo tempo do cartão
   assert.equal(detectGap({ ...before, at: Date.now() - 20 * 3600e3 }, now), null)
   // sem retrato (primeira conexão)
   assert.equal(detectGap(null, now), null)
+})
+
+test('dados da câmera viram campos do take no formato do kit', () => {
+  let s = {}
+  s = apply(s, 'FF0E0000010902021E001E00001070080300') // 30 fps com flags M-rate = 29.97, 4096x2160
+  s = apply(s, 'FF080000010E030290010000') // ISO 400
+  s = apply(s, 'FF08000001020202E0150000') // WB 5600
+  s = apply(s, 'FF0600000A0001020304') // BRAW 8:1
+  s = apply(s, 'FF080000010B0302' + '50460000') // ângulo 18000 = 180°
+  const { fields, extra } = cameraFields(s)
+  assert.deepEqual(fields, { iso: '400', shutter: '180°', fps: '29.97', wb: '5600K' })
+  assert.deepEqual(extra, { codec: 'BRAW 8:1', resolution: '4K DCI' })
+  assert.equal(cameraFields({ shutter: 50 }).fields.shutter, '1/50')
+  assert.equal(cameraFields({ shutterAngle: 172.8 }).fields.shutter, '172.8°')
+  // slow motion: arquivo 24, sensor 48 fora da velocidade
+  assert.equal(cameraFields({ fps: 24, sensorFps: 48, offSpeed: true }).fields.fps, '48')
+  assert.deepEqual(cameraFields({}), { fields: {}, extra: {} })
+})
+
+test('duração pelo timecode', () => {
+  assert.equal(tcDuration('14:02:10:05', '14:02:50:12', 24), '0:40')
+  assert.equal(tcDuration('23:59:50:00', '00:00:20:00', 25), '0:30')
+  assert.equal(tcDuration('', '14:02:50:12', 24), null)
+  assert.equal(tcDuration('14:02:10:05', '14:02:50:12', null), null)
 })

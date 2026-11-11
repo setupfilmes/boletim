@@ -17,6 +17,8 @@ import Account from './screens/Account'
 import ImportResolve from './screens/ImportResolve'
 import CardCheck from './screens/CardCheck'
 import CameraLink from './screens/CameraLink'
+import { useEffect, useState } from 'react'
+import { start as startCameraSession } from './lib/bmd/session'
 import ShareWatcher from './components/ShareWatcher'
 import ErrorBoundary from './components/ErrorBoundary'
 import InviteAcceptor from './components/InviteAcceptor'
@@ -40,6 +42,12 @@ function BottomNav() {
   )
 }
 
+// Câmera Bluetooth: com a conta aberta, cada REC da câmera vira take no último plano aberto
+function CameraSession() {
+  useEffect(() => { startCameraSession() }, [])
+  return null
+}
+
 // Erro numa tela não derruba o app: some ao trocar de tela
 function SafeRoutes({ children }) {
   const { pathname, search } = useLocation()
@@ -49,7 +57,13 @@ function SafeRoutes({ children }) {
 function Gate() {
   const { loading, user, recovery } = useAuth()
   // Teste da câmera Bluetooth abre sem conta: não lê nem grava dados do Boletim
-  if (!user && window.location.hash.startsWith('#/camera')) return <HashRouter><CameraLink standalone /></HashRouter>
+  const [hash, setHash] = useState(window.location.hash)
+  useEffect(() => {
+    const f = () => setHash(window.location.hash)
+    window.addEventListener('hashchange', f)
+    return () => window.removeEventListener('hashchange', f)
+  }, [])
+  if (!user && hash.startsWith('#/camera')) return <HashRouter><CameraLink standalone /></HashRouter>
   if (!supabase) return <Setup />
   if (loading) return <div className="flex h-full items-center justify-center font-display text-muted">Carregando…</div>
   if (recovery) return <NewPassword />
@@ -76,6 +90,7 @@ function Gate() {
       <BottomNav />
       <ShareWatcher />
       <InviteAcceptor />
+      <CameraSession />
     </HashRouter>
   )
 }

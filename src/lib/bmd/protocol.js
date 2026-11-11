@@ -134,12 +134,17 @@ export function applyMessage(state, msg) {
     s.codecVariant = variant ?? String(val[1])
   } else if (c === 1 && p === 9 && Array.isArray(val) && val.length >= 4) {
     s.fps = val[0]; s.sensorFps = val[1]; s.width = val[2]; s.height = val[3]
+    // flags: bit 0 = fps do arquivo "M-rate" (23.976…), bit 1 = sensor M-rate, bit 2 = sensor fora da velocidade
+    const f = val[4] ?? 0
+    s.mrate = !!(f & 1); s.sensorMrate = !!(f & 2); s.offSpeed = !!(f & 4)
   } else if (c === 1 && p === 14 && Array.isArray(val)) {
     s.iso = val[0]
   } else if (c === 1 && p === 2 && Array.isArray(val) && val.length >= 1) {
     s.wb = val[0]; s.tint = val[1]
+  } else if (c === 1 && p === 11 && Array.isArray(val)) {
+    s.shutterAngle = val[0] / 100; delete s.shutter // ângulo × 100 (18000 = 180°)
   } else if (c === 1 && p === 12 && Array.isArray(val)) {
-    s.shutter = val[0] // 1/x
+    s.shutter = val[0]; delete s.shutterAngle // 1/x
   } else if (c === 9 && p === 2 && Array.isArray(val)) {
     s.cardSeconds = val // segundos restantes por cartão (fora do manual)
   } else if (c === 12 && SLATE[p]) {
@@ -209,4 +214,42 @@ export function detectGap(before, now, nowAt = Date.now()) {
     takes: jump ? Array.from({ length: jump }, (_, i) => before.take + (before.recording ? 1 : 0) + i) : null,
     approxSeconds: seconds,
   }
+}
+
+// ── Dados da câmera → campos do take (texto, no formato do kit do Boletim) ──
+const MRATE = { 24: '23.976', 30: '29.97', 48: '47.952', 60: '59.94', 120: '119.88' }
+const fpsText = (n, mrate) => (n ? (mrate && MRATE[n]) || String(n) : null)
+const trimNum = (n) => String(Math.round(n * 10) / 10).replace(/\.0$/, '')
+const RESOLUTIONS = { '4096x2160': '4K DCI', '3840x2160': '4K UHD', '6144x3456': '6K', '6144x2560': '6K 2.4:1', '6144x3240': '6K DCI',
+  '5744x3024': '5.7K', '2880x2160': '2.8K 4:3', '2688x1512': '2.6K', '1920x1080': '1080p', '1280x720': '720p' }
+
+/** Converte o estado da câmera nos campos do take. Só o que a câmera informou (o resto fica como está). */
+export function cameraFields(cam = {}) {
+  const out = {}, extra = {}
+  if (cam.iso) out.iso = String(cam.iso)
+  if (cam.shutterAngle) out.shutter = `${trimNum(cam.shutterAngle)}°`
+  else if (cam.shutter) out.shutter = `1/${cam.shutter}`
+  // FPS do set = velocidade do sensor (slow motion: 48 num projeto 24)
+  const fps = cam.offSpeed ? fpsText(cam.sensorFps, cam.sensorMrate) : fpsText(cam.fps, cam.mrate)
+  if (fps) out.fps = fps
+  if (cam.wb) out.wb = `${cam.wb}K`
+  if (cam.codec) {
+    const short = { 'Blackmagic RAW': 'BRAW', ProRes: 'ProRes', DNxHD: 'DNxHD', CinemaDNG: 'CinemaDNG' }[cam.codec] || cam.codec
+    extra.codec = cam.codecVariant ? `${short} ${cam.codecVariant}` : short
+  }
+  if (cam.width && cam.height) extra.resolution = RESOLUTIONS[`${cam.width}x${cam.height}`] || `${cam.width}×${cam.height}`
+  return { fields: out, extra }
+}
+
+/** Duração entre dois timecodes ("HH:MM:SS:FF") no formato da continuidade ("0:36"). null se não der. */
+export function tcDuration(tcIn, tcOut, fps) {
+  const parse = (tc) => (/^\d\d:\d\d:\d\d:\d\d$/.test(tc || '') ? tc.split(':').map(Number) : null)
+  const a = parse(tcIn), b = parse(tcOut)
+  const base = Math.round(Number(fps) || 0)
+  if (!a || !b || !base) return null
+  const frames = (t) => ((t[0] * 60 + t[1]) * 60 + t[2]) * base + t[3]
+  let d = frames(b) - frames(a)
+  if (d < 0) d += 24 * 3600 * base // passou da meia-noite
+  const sec = Math.round(d / base)
+  return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`
 }

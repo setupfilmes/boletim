@@ -4,6 +4,7 @@
 import { useEffect, useState, useSyncExternalStore } from 'react'
 import { TopBar, Btn, Card, TextInput, useDialog } from '../components/ui'
 import * as link from '../lib/bmd/link'
+import * as bt from '../lib/bmd/session'
 import { cmd } from '../lib/bmd/protocol'
 import { fmtTime } from '../lib/util'
 
@@ -45,6 +46,7 @@ function Header({ standalone }) {
 
 export default function CameraLink({ standalone }) {
   const s = useSyncExternalStore(link.subscribe, link.getState)
+  const session = useSyncExternalStore(bt.subscribe, bt.getState)
   const { confirm, notify } = useDialog()
   const [scene, setScene] = useState('')
   const [take, setTake] = useState('')
@@ -238,6 +240,13 @@ export default function CameraLink({ standalone }) {
                 ))}
               </div>
             )}
+          {!standalone && (
+            <p className="mt-2 text-sm font-bold" data-testid="bt-context">
+              {session.context
+                ? `Cada REC vira take no plano ${session.context.label} (o último que você abriu).`
+                : 'Nenhum plano aberto ainda: abra um plano para os RECs virarem takes.'}
+            </p>
+          )}
           <p className="mt-2 text-xs text-muted">
             A lista fica guardada neste aparelho. Se a conexão cair, ao voltar o app conta pelo nº do take da câmera
             quantos clipes rodaram nesse meio-tempo. A lista completa, com o nome dos arquivos, vem do cartão:
