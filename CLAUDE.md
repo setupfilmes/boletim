@@ -60,7 +60,10 @@ UI (screens) ──> repo.js ──> IndexedDB (Dexie, 1 banco por usuário: bol
   - *pull*: lista completa de `projects` (detecta projeto novo/compartilhado/removido) + `project_members` do
     usuário (papéis → meta `roles`) + incremental por tabela usando cursor `updated_at` (relógio do **servidor**,
     trigger `touch_updated_at`) com 60 s de sobreposição. Projeto que aparece pela 1ª vez → baixa todos os
-    filhos dele. Linha local com `_dirty` nunca é sobrescrita pelo servidor (último envio vence).
+    filhos dele. **Mescla por campo (11/11/2026):** cada linha guarda `_base` (valores do servidor na última
+    conversa); a sync agora **recebe antes de enviar**, mescla campo a campo a linha pendente com a do servidor
+    (`mergeRow`; jsonb de objeto como `extra`/`kit` mescla por chave) e envia só os campos alterados com `update`
+    por linha (`pushChanged`; linha sem `_base` = nova ou de antes desta versão → `upsert` inteiro, como antes).
   - Dispara: login, evento `online`, app voltando ao primeiro plano, a cada 60 s, e 1,5 s após gravações.
 - **Exclusão = soft delete** (`deleted=true`) para propagar entre aparelhos. Excluir cena/plano marca os
   filhos também. Excluir projeto (só o dono) marca o projeto e remove os filhos localmente.
@@ -120,7 +123,8 @@ a versão do Dexie em `openDb()` (`db.version(2).stores(...)` — nunca editar a
 
 ## Padrão da indústria no take (`src/lib/fields.js`)
 
-- `takes.sound` ('sync'|'mos', grudado; padrão 'sync'), `takes.circled` (circle take = escolhido; ≠ GOOD),
+- `takes.sound` ('sync'|'mos', grudado; padrão 'sync'), `takes.circled` (**aposentado em 11/11/2026**, ver
+  "Continuidade"; coluna continua no banco),
   `takes.marks` (['pu','ser','tail','afs','ns']), `takes.extra` (objeto com os
   campos extras). Colunas criadas por `supabase/atualizacao-2026-09-24.sql` (também no `schema.sql`).
 - Campos extras ligados por projeto em `project.kit.fields` (catálogo `EXTRA_FIELDS`: TC in/out, ND interno, LUT,
@@ -128,7 +132,7 @@ a versão do Dexie em `openDb()` (`db.version(2).stores(...)` — nunca editar a
   câmera; `perCamera` = no PDF vai para o cabeçalho por câmera (LUT/codec/resolução/unidade); o resto vai na
   coluna "Extras". Gravar sempre com `updateExtra()` (mescla com o objeto atual). Valores já usados no projeto
   viram opções da gaveta (`PickerSheet persist={false}` — não salva no kit, cuja categoria tem CHECK no banco).
-- PDF: circle take = círculo vermelho em volta do nº do take (`didDrawCell`); coluna "Claquete" (só se houver
+- PDF: status GOOD com estrelas ("GOOD 5/5"); coluna "Claquete" (só se houver
   marcação, sigla + nome, 17 mm); coluna Som SYNC/MOS (MOS em amarelo); colunas curtas com
   `cellWidth: 'wrap'` (só `FLEX_COLS` quebram linha; Multicam 14 mm, Extras mín. 30 mm — sem isso os títulos
   quebram no meio e o PDF da demo dobra de páginas); `rowPageBreak: 'avoid'`.
@@ -329,3 +333,50 @@ fluxos, tokens) e protótipo (https://claude.ai/artifact/B4A9V29rLeUegNxszQ6wno)
    diárias, tema) · cenas da diária/roteiro · cena com abas de planos e tabela de takes editável (clique/Enter edita,
    Enter salva e desce, Tab direita, Esc cancela; status G/N/C; claquete por siglas; filtros separados por +).
    Ainda não feito: seleção múltipla na tabela, mover takes entre planos, arrastar cenas (reordenar é por Subir/Descer).
+
+## Continuidade e importação do Resolve (ramo `continuidade`, 11/11/2026)
+
+Decisões do Antonio (11/11/2026), a partir dos relatórios da continuísta do Desce do Salto:
+- **Um status só**, padrão internacional GOOD / NG / CHECK, e **estrelas** (`takes.rating` 1–5) **independentes do status**
+  (pedido do Antonio): trocar o status não mexe nas estrelas; tocar na estrela marcada apaga. Em GOOD: 5 = VALEU,
+  1–4 = RESERVA; GOOD sem estrelas conta como 5
+  (`ratingOf`, `resultOf` em `fields.js`). O **circulado saiu** do app e do PDF (as estrelas tomam o lugar).
+- No Resolve: GOOD = **Good Take** (coluna `Tag` = 1), NG = **Rejected** (`Tag` = 2), estrelas = `Rating`, cor do clipe:
+  Green valeu · Yellow reserva · Orange/Red não valeu · Purple checar · Brown/Blue falso REC / sem registro.
+  Personagens: o campo "People" do Resolve 21 é preenchido pela análise de rostos (IntelliSearch), não dá para
+  digitar → personagens irão num campo próprio + Keywords (testar coluna "People" na 1ª exportação).
+- Colunas novas (`supabase/atualizacao-2026-11-11-continuidade.sql`, também no `schema.sql`): `takes.rating`,
+  `clip_type` (falso_rec | ensaio | wild | insert), `duration`, `comments` (Comments do Resolve: notas de correção),
+  `slate_as` (claquete marcada errada), `characters` (jsonb), `file_name` (nome real do arquivo); `shots.edit_note`.
+  Só entram no envio quando existem na linha (`pick`). **Rodar o SQL antes de usar em produção.**
+- `takeKey`: clipe com `clip_type` nunca se junta a um take.
+- **Importar do Resolve** (`/importar`, botão na lista de projetos): `lib/resolveCsv.js` (puro, testável no Node) lê o
+  "Export Metadata" (UTF-16 com BOM). O Resolve **não escapa aspas** dentro dos campos: o leitor testa as leituras
+  possíveis e fica com a que dá o nº de colunas do cabeçalho com menos aspas fora do lugar (sem isso 4 clipes do Desce
+  do Salto saíam desalinhados). Só arquivos de vídeo; reserva sem Rating entra com 3★; falso REC, ensaio e clipe sem
+  cena/take vão para a cena "AVULSOS" (um plano por tipo); hora do take = data + TC de início (o relógio interno da
+  câmera estava errado: arquivo A001_0919… gravado em 19/10). Prévia com diárias marcáveis (clipes sem "Shoot Day",
+  ex.: teste de câmera de 17/09, começam desmarcados). `lib/resolveImport.js` grava tudo no aparelho e chama `ensureDays`.
+  Desce do Salto (756 clipes .braw): 739 importados, 15 diárias, 88 cenas + AVULSOS, 29 cartões.
+- Fases (todas feitas em 11/11/2026, testadas com o Desce do Salto importado em navegador automático, sem Supabase):
+  1) base + mescla por campo; 2) importar do Resolve;
+  3) **função no aparelho** (`boletim.funcao.<projeto>` no localStorage; botões Câmera | Continuidade na tela do take —
+     escolha de quem usa o aparelho, não é permissão; "Só visualizar" continua sendo o papel viewer da Equipe).
+     Continuidade (`components/ContinuityBlock.jsx`) troca a grade de dados de câmera por: personagens (lista da ficha
+     técnica `kit.personagens`, grudados do take anterior via `STICKY_FIELDS`), tempo (REC/CORTA → `duration`),
+     claquete errada (`slate_as`), problema técnico (`extra.problemas`). Nota/foto/status/estrelas iguais para os dois.
+     Tipos de clipe no set: botões "Foi falso REC" / "Foi ensaio" no registro (o clipe atual vira registro à parte e o
+     take continua com o mesmo número) e "Tipo do clipe" nas opções do take. `groupTakes` põe clipe com `clip_type` num
+     grupo próprio (`clipType`); `findTake` acha o take N ignorando esses; numeração (`planNextTake`, `nextNumber`)
+     ignora clipes. Plano ganhou "Observação para a montagem" (`shots.edit_note`) no ShotForm.
+  4) relatórios da continuidade (`lib/continuityReports.js`, aba Relatórios): progresso (por diária: início = 1º take,
+     fim = último TC out, programadas = cenas da pasta da diária, omitidas com "remanejada p/ Dia X"), relatório final
+     (por cena/plano: valeu, reservas com estrelas, dia/cartão, som, descrição, observação p/ montagem) e boletim diário
+     (por cena; resultado colorido; por diária ou todas).
+  5) CSV para o Resolve (`buildResolveCsv`, UTF-16 com BOM como o Resolve exporta; Media Pool → Import Metadata, casa pelo
+     File Name): Tag 1/2, Rating, Clip Color/Flags, Keywords "CENA n" + personagens, People + Personagens (testar qual o
+     Resolve aceita), Comments, EDL Clip Name `31-01-T02_A001C002`. Take sem `file_name` sai com o clipe e o app avisa.
+  6) **Conferir cartão (DIT)** (`screens/CardCheck.jsx`, `/p/:id/cartao`, menu ⋮): escolher a pasta do cartão (só os nomes
+     são lidos) ou o CSV do Resolve → conferem / clipes sem take / takes sem clipe / clipe repetido; casa pelo `file_name`
+     e, se o take ainda não tem, pelo clipe (A001C003); botão grava o nome real do arquivo nos takes.
+- Falta: validar o CSV de volta no Resolve (Import Metadata) e o teste com o Supabase real (rodar o SQL antes).

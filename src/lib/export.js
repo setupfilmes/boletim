@@ -2,12 +2,14 @@
 import { getDb } from './db'
 import { natCompare, fmtDate, fmtTime, joinFilters, plural } from './util'
 import { cameraOrder, projectCameras, takeKey, shotLabel } from './cameras'
-import { EXTRA_FIELDS, extraField, extraText, isEmpty, markCode, markFull, SOUND } from './fields'
+import { EXTRA_FIELDS, extraField, extraText, isEmpty, markCode, markFull, SOUND, ratingOf, resultOf, RESULT_LABEL } from './fields'
 import { photoDataUrl } from './photos'
 import { loadDays, dayLabel } from './days'
 import { ficha, formatLine, camerasLine } from './ficha'
 
 const STATUS_TXT = { good: 'GOOD', ng: 'NG', check: 'CHECK' }
+// status + estrelas da continuidade: "GOOD 5/5" (valeu), "GOOD 3/5" (reserva), "NG 2/5"
+const statusTxt = (r) => [STATUS_TXT[r.status], r.rating && `${r.rating}/5`].filter(Boolean).join(' ')
 const STATUS_RGB = { good: [34, 197, 94], ng: [239, 68, 68], check: [250, 204, 21] }
 
 export async function reportData(projectId, date = null) {
@@ -70,6 +72,7 @@ export async function reportData(projectId, date = null) {
   let prevKey = null
   const rows = takes.map((t) => ({
     id: t.id,
+    src: t, sceneRow: scenes[t.scene_id], shotRow: shots[t.shot_id], // relatórios da continuidade
     photos: photosByTake[t.id] || [],
     group: key(t) === prevKey ? group : (prevKey = key(t), ++group),
     multicam: multicamText(byTake.get(key(t))),
@@ -93,11 +96,15 @@ export async function reportData(projectId, date = null) {
     time: fmtTime(t.recorded_at),
     corrected: t.extra?.corrigido_em || null, // take mudado depois de gravado (tela do take)
     notes: t.notes || '',
+    comments: t.comments || '',
+    clipType: t.clip_type || '',
+    fileName: t.file_name || '',
     isoDate: t.shoot_date || '',
     day: dayByDate[t.shoot_date] ? dayLabel(dayByDate[t.shoot_date].number) : '',
     slate: label(t.shot_id),
     sound: SOUND[t.sound] || '',
-    circled: !!t.circled,
+    rating: ratingOf(t),
+    result: resultOf(t),
     marks: (t.marks || []).map(markCode).join(' '), // siglas internacionais (CSV / DIT / ALE)
     markNames: (t.marks || []).map(markFull).join(', '), // sigla + nome (PDF)
     extra: t.extra || {},
@@ -127,7 +134,8 @@ export async function reportData(projectId, date = null) {
     scenes: new Set(rows.map((r) => r.scene)).size,
     shots: new Set(takes.map((t) => t.shot_id)).size,
     rolls: [...new Set(rows.map((r) => r.roll).filter(Boolean))],
-    circled: rows.filter((r) => r.circled).length,
+    valeu: rows.filter((r) => r.result === 'valeu').length,
+    reserva: rows.filter((r) => r.result === 'reserva').length,
     mos: rows.filter((r) => r.sound === 'MOS').length,
     photos: rows.reduce((n, r) => n + r.photos.length, 0),
   }
@@ -140,7 +148,7 @@ const FLEX_COLS = new Set(['Filtros', 'Multicam', 'Extras', 'Notas pós / VFX'])
 
 // Aba aberta antes de uma atualização do app: os arquivos antigos já saíram do servidor.
 // Recarrega uma vez (os dados estão no aparelho) para pegar a versão nova.
-function staleBuild(err) {
+export function staleBuild(err) {
   if (/dynamically imported module|module script failed|Loading chunk/i.test(err?.message || '')) {
     let last = 0
     try { last = Number(sessionStorage.getItem('boletim.staleReload')) || 0 } catch { /* sem storage */ }
@@ -153,7 +161,7 @@ function staleBuild(err) {
   throw err
 }
 
-const pdfSafe = (s) => String(s ?? '').replace(/∞/g, 'INF').replace(/[’‘]/g, "'").replace(/[“”]/g, '"')
+export const pdfSafe = (s) => String(s ?? '').replace(/∞/g, 'INF').replace(/[’‘]/g, "'").replace(/[“”]/g, '"')
   .replace(/[–—]/g, '-').replace(/[^\x00-\xFF]/g, '')
 
 export async function buildPdf(projectId, date = null) {
@@ -198,7 +206,7 @@ export async function buildPdf(projectId, date = null) {
   const multi = summary.multicamTakes > 0
   const sum = `${plural(summary.takes, 'take')}${summary.records !== summary.takes ? ` (${summary.records} registros de câmera)` : ''}`
     + `  ·  ${plural(summary.scenes, 'cena')}  ·  ${plural(summary.shots, 'plano')}  ·  GOOD ${summary.good}  ·  NG ${summary.ng}  ·  CHECK ${summary.check}`
-    + (summary.circled ? `  ·  Circulados ${summary.circled}` : '') + (summary.mos ? `  ·  MOS ${summary.mos}` : '')
+    + (summary.reserva ? `  ·  Valeu ${summary.valeu}  ·  Reserva ${summary.reserva}` : '') + (summary.mos ? `  ·  MOS ${summary.mos}` : '')
     + (summary.photos ? `  ·  ${plural(summary.photos, 'foto')}` : '')
     + (summary.rolls.length ? `  ·  Rolos: ${summary.rolls.join(', ')}` : '')
   doc.setFontSize(8)
@@ -237,7 +245,7 @@ export async function buildPdf(projectId, date = null) {
     (f.key === 'vfx' ? `VFX: ${extraText(f, r.extra.vfx)}` : `${f.short || f.label} ${extraText(f, r.extra[f.key])}`)).join(' · ')
   const hasExtras = rows.some((r) => extrasOf(r))
   const hasMarks = rows.some((r) => r.markNames)
-  const legend = [summary.circled && 'O em volta do número do take = take circulado (escolhido)',
+  const legend = [rows.some((r) => r.rating) && 'n/5 = estrelas da continuidade (em GOOD: 5 = valeu, 1 a 4 = reserva)',
     rows.some((r) => r.corrected) && '* na hora = take corrigido depois de gravado']
     .filter(Boolean)
   if (legend.length) { doc.setTextColor(90, 90, 90); info(`Legenda: ${legend.join('  ·  ')}`); doc.setTextColor(0, 0, 0) }
@@ -247,7 +255,7 @@ export async function buildPdf(projectId, date = null) {
     'Foco', 'ISO', 'Shutter', 'FPS', 'WB', 'Som', 'Status', 'Hora', ...(hasExtras ? ['Extras'] : []), 'Notas pós / VFX']]
   const body = rows.map((r) => [...(date ? [] : [r.date]), r.scene, r.shot, r.take, ...(hasMarks ? [r.markNames] : []), r.camera,
     ...(multi ? [r.multicam] : []), r.roll, r.clip, r.lens, r.tstop, r.filters, r.focus, r.iso, r.shutter, r.fps, r.wb, r.sound,
-    STATUS_TXT[r.status] || '', r.corrected ? `${r.time} *` : r.time, ...(hasExtras ? [extrasOf(r)] : []),
+    statusTxt(r), r.corrected ? `${r.time} *` : r.time, ...(hasExtras ? [extrasOf(r)] : []),
     [r.notes, r.photos.length && `(${plural(r.photos.length, 'foto')})`].filter(Boolean).join(' ')].map(pdfSafe))
   const col = (name) => head[0].indexOf(name)
   const statusCol = col('Status')
@@ -290,15 +298,6 @@ export async function buildPdf(projectId, date = null) {
         else d.cell.styles.textColor = [150, 150, 150]
       }
       if (d.column.index <= (date ? 2 : 3) + (hasMarks ? 1 : 0) + (multi ? 1 : 0) && d.column.index !== col('Claquete')) d.cell.styles.fontStyle = 'bold'
-    },
-    // circle take: círculo em volta do número do take, como no boletim de papel
-    didDrawCell: (d) => {
-      const r = rows[d.row.index]
-      if (d.section !== 'body' || d.column.index !== takeCol || !r?.circled) return
-      doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5)
-      const w = doc.getTextWidth(String(r.take))
-      doc.setDrawColor(200, 30, 30); doc.setLineWidth(0.35)
-      doc.ellipse(d.cell.x + d.cell.padding('left') + w / 2, d.cell.y + d.cell.height / 2, w / 2 + 1.3, 2.3, 'S')
     },
   })
 
@@ -354,7 +353,7 @@ async function addPhotoPages(doc, rows, safe) {
     doc.setTextColor(0, 0, 0); doc.setFont('helvetica', 'bold'); doc.setFontSize(8)
     doc.text(safe(`${r.slate}  ·  Take ${r.take}${r.camera ? `  ·  Cam ${r.camera}` : ''}`), x, y + ih + 4)
     doc.setFont('helvetica', 'normal'); doc.setFontSize(7); doc.setTextColor(90, 90, 90)
-    doc.text(safe([r.date, r.time, STATUS_TXT[r.status], r.circled && 'circulado'].filter(Boolean).join('  ·  ')), x, y + ih + 7.5)
+    doc.text(safe([r.date, r.time, statusTxt(r)].filter(Boolean).join('  ·  ')), x, y + ih + 7.5)
     if (p.caption) {
       doc.setFont('helvetica', 'italic'); doc.setFontSize(7.5); doc.setTextColor(0, 0, 0)
       const lines = doc.splitTextToSize(safe(p.caption), cw)
@@ -374,11 +373,12 @@ export async function buildCsv(projectId, date = null) {
   const { project, rows, fields } = await reportData(projectId, date)
   const cols = [['day', 'Diária'], ['date', 'Data'], ['scene', 'Cena'], ['shot', 'Plano'], ['shotType', 'Enquadramento'], ['take', 'Take'],
     ['camera', 'Cam'], ['multicam', 'Multicam'], ['roll', 'Rolo'], ['clip', 'Clipe'], ['lens', 'Lente'], ['tstop', 'T-Stop'], ['filters', 'Filtros'],
-    ['focus', 'Foco'], ['iso', 'ISO'], ['shutter', 'Shutter'], ['fps', 'FPS'], ['wb', 'WB'], ['sound', 'Som'], ['circled', 'Circulado'],
-    ['marks', 'Marcações'], ['status', 'Status'], ['time', 'Hora'], ['correctedAt', 'Corrigido em'], ...fields.map((f) => [`x:${f.key}`, f.label]), ['notes', 'Notas pós/VFX'],
+    ['focus', 'Foco'], ['iso', 'ISO'], ['shutter', 'Shutter'], ['fps', 'FPS'], ['wb', 'WB'], ['sound', 'Som'], ['result', 'Resultado'], ['rating', 'Estrelas'],
+    ['marks', 'Marcações'], ['status', 'Status'], ['time', 'Hora'], ['correctedAt', 'Corrigido em'], ...fields.map((f) => [`x:${f.key}`, f.label]), ['notes', 'Notas pós/VFX'], ['comments', 'Correção / pós'], ['fileName', 'Arquivo'],
     ['photoCount', 'Fotos'], ['photoCaptions', 'Legendas das fotos']]
   const esc = csvEscape(';')
-  const val = (r, k) => (k === 'status' ? STATUS_TXT[r.status] || '' : k === 'circled' ? (r.circled ? 'Sim' : '')
+  const val = (r, k) => (k === 'status' ? STATUS_TXT[r.status] || '' : k === 'result' ? RESULT_LABEL[r.result] || ''
+    : k === 'rating' ? r.rating || ''
     : k === 'photoCount' ? r.photos.length || ''
     : k === 'correctedAt' ? (r.corrected ? `${fmtDate(r.corrected.slice(0, 10))} ${fmtTime(r.corrected)}` : '')
     : k === 'photoCaptions' ? r.photos.map((p) => p.caption).filter(Boolean).join(' | ')
@@ -401,7 +401,7 @@ const csvEscape = (sep) => (v) => {
 // ou por "timecode". Este CSV segue esse estilo, com cabeçalhos em inglês. Testar com o DIT antes de depender dele.
 const DIT_COLS = [
   ['filenameBase', (r) => r.clip], ['camera', (r) => r.camera], ['cameraSerial', (r) => r.cameraSerial || ''], ['reel', (r) => r.roll], ['scene', (r) => r.scene],
-  ['shot', (r) => r.shot], ['slate', (r) => r.slate], ['take', (r) => r.take], ['circled', (r) => (r.circled ? 'YES' : '')],
+  ['shot', (r) => r.shot], ['slate', (r) => r.slate], ['take', (r) => r.take], ['rating', (r) => r.rating || ''],
   ['sound', (r) => r.sound], ['status', (r) => STATUS_TXT[r.status] || ''], ['marks', (r) => r.marks],
   ['lens', (r) => r.lens], ['tStop', (r) => r.tstop], ['focus', (r) => r.focus], ['filters', (r) => r.filters],
   ['iso', (r) => r.iso], ['shutter', (r) => r.shutter], ['fps', (r) => r.fps], ['whiteBalance', (r) => r.wb],
@@ -436,7 +436,7 @@ export async function buildAle(projectId, date = null) {
   const cols = [
     ['Name', (r) => r.clip], ['Tracks', (r) => (r.sound === 'MOS' ? 'V' : 'VA1A2')], ['Start', (r) => r.extra.tc_in || ''],
     ['End', (r) => r.extra.tc_out || ''], ['Tape', (r) => r.roll], ['Camroll', (r) => r.roll], ['Scene', (r) => r.slate],
-    ['Take', (r) => r.take], ['Camera', (r) => r.camera], ['Circled', (r) => (r.circled ? 'YES' : '')], ['Sound', (r) => r.sound],
+    ['Take', (r) => r.take], ['Camera', (r) => r.camera], ['Rating', (r) => r.rating || ''], ['Sound', (r) => r.sound],
     ['Status', (r) => STATUS_TXT[r.status] || ''], ['Marks', (r) => r.marks], ['Lens', (r) => r.lens], ['T-Stop', (r) => r.tstop],
     ['Focus', (r) => r.focus], ['Filters', (r) => r.filters], ['ISO', (r) => r.iso], ['Shutter', (r) => r.shutter],
     ['FPS', (r) => r.fps], ['WB', (r) => r.wb], ['LUT', (r) => r.extra.lut || ''], ['Multicam', (r) => r.multicam],
@@ -448,7 +448,7 @@ export async function buildAle(projectId, date = null) {
   return { blob, filename: fileName(project.title, date, 'ale') }
 }
 
-function fileName(title, date, ext, tag = '') {
+export function fileName(title, date, ext, tag = '') {
   const slug = String(title || 'projeto').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/gi, '_').replace(/^_|_$/g, '')
   return `Boletim_${slug}_${date ? date : 'completo'}${tag ? `_${tag}` : ''}.${ext}`
 }

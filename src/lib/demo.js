@@ -303,7 +303,7 @@ export async function createDemoProject(userName) {
                 iso: look.iso, shutter: c.shutter || sh.shutter || look.shutter, fps: c.fps || sh.fps || look.fps, wb: look.wb,
                 status,
                 sound: sh.mos ? 'mos' : 'sync', marks: sh.marks?.[k] || null, extra,
-                circled: status === 'good' && statuses.lastIndexOf('good') === k, // o último GOOD de cada câmera é o circulado
+                rating: status === 'good' ? (statuses.lastIndexOf('good') === k ? 5 : 3) : null, // último GOOD de cada câmera = valeu (5★); os outros, reserva
                 notes: note,
               })
               takes.push(take)

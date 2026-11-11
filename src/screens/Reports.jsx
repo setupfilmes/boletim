@@ -6,6 +6,7 @@ import { buildCsv, buildPdf, buildDitCsv, buildAle, downloadFile, shareFile } fr
 import { fmtDate, todayISO, plural } from '../lib/util'
 import { countTakes } from '../lib/cameras'
 import { useDays, dayLabel } from '../lib/days'
+import { buildProgressPdf, buildFinalReportPdf, buildContinuityDailyPdf, buildResolveCsv } from '../lib/continuityReports'
 
 export default function Reports({ project }) {
   const takes = useTakesByProject(project.id)
@@ -30,6 +31,7 @@ export default function Reports({ project }) {
     setBusy(key)
     try {
       const file = await fn(project.id, date)
+      if (file.missing?.length) notify(`${plural(file.missing.length, 'clipe')} sem nome de arquivo: o Resolve casa pelo File Name (veja a tela do DIT)`, 'error')
       if (mode === 'share') {
         const r = await shareFile(file)
         if (r === 'downloaded') notify('Arquivo salvo em Downloads')
@@ -59,8 +61,13 @@ export default function Reports({ project }) {
         onClick={() => actionSheet('Arquivos para DIT / pós', [
           { label: 'CSV para DIT (Silverstack / Drylab)', onClick: () => run(`${id}-dit`, buildDitCsv, date, 'share') },
           { label: 'ALE (Avid / DaVinci Resolve / Silverstack)', onClick: () => run(`${id}-ale`, buildAle, date, 'share') },
+          { label: 'Metadados para o DaVinci Resolve (Import Metadata)', onClick: () => run(`${id}-resolve`, buildResolveCsv, date, 'share') },
         ])}>
         Arquivos para DIT / pós
+      </Btn>
+      <Btn size="sm" variant="ghost" className="col-span-3" disabled={!!busy} data-testid={`cont-${id}`}
+        onClick={() => run(`${id}-cont`, buildContinuityDailyPdf, date, 'share')}>
+        Boletim da continuidade (PDF)
       </Btn>
     </div>
   )
@@ -87,6 +94,15 @@ export default function Reports({ project }) {
           <Actions date={null} id="all" />
         </Card>
       )}
+      <Card className="p-4">
+        <div className="mb-1 font-display text-lg font-extrabold">Continuidade · projeto inteiro</div>
+        <div className="mb-3 text-sm text-muted">Modelo dos relatórios entregues pela continuidade.</div>
+        <div className="grid grid-cols-1 gap-2">
+          <Btn size="sm" variant="surface" disabled={!!busy} onClick={() => run('progress', buildProgressPdf, null, 'share')} data-testid="progress">Relatório de progresso (PDF)</Btn>
+          <Btn size="sm" variant="surface" disabled={!!busy} onClick={() => run('final', buildFinalReportPdf, null, 'share')} data-testid="final">Relatório final (PDF)</Btn>
+          <Btn size="sm" variant="surface" disabled={!!busy} onClick={() => run('resolve', buildResolveCsv, null, 'share')} data-testid="resolve">Metadados para o DaVinci Resolve (CSV)</Btn>
+        </div>
+      </Card>
       {busy && <div className="text-center text-sm text-muted">Gerando…</div>}
     </div>
   )

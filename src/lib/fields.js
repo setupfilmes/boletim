@@ -63,3 +63,27 @@ export function formatTc(raw) {
   const p = d.padStart(8, '0')
   return `${p.slice(0, 2)}:${p.slice(2, 4)}:${p.slice(4, 6)}:${p.slice(6, 8)}`
 }
+
+// ---------- Resultado do take (continuidade, padrão internacional) ----------
+// Três status: GOOD / NG / CHECK + estrelas (takes.rating 1–5) independentes do status.
+// Em GOOD: 5 = VALEU (o take escolhido), 1–4 = RESERVA. No Resolve: GOOD = Good Take, NG = Rejected, estrelas = Rating.
+// GOOD sem estrelas conta como 5 (takes antigos; o antigo "circulado" também era o escolhido).
+export const ratingOf = (t) => t?.rating ?? (t?.status === 'good' ? 5 : null)
+
+// 'valeu' | 'reserva' | 'ng' | 'check' | null
+export function resultOf(t) {
+  if (!t?.status) return null
+  if (t.status === 'good') return ratingOf(t) >= 5 ? 'valeu' : 'reserva'
+  return t.status
+}
+export const RESULT_LABEL = { valeu: 'VALEU', reserva: 'RESERVA', ng: 'NÃO VALEU', check: 'CHECAR' }
+export const stars = (n) => (n ? '★'.repeat(n) + '☆'.repeat(5 - n) : '')
+
+// Clipes que não são take: consomem número de clipe, mas não número de take (takes.clip_type)
+export const CLIP_TYPES = [
+  { key: 'falso_rec', label: 'Falso REC', code: 'FALSO REC' },
+  { key: 'ensaio', label: 'Ensaio', code: 'ENSAIO' },
+  { key: 'wild', label: 'Wild (som/imagem solta)', code: 'WILD' },
+  { key: 'insert', label: 'Insert', code: 'INSERT' },
+]
+export const clipTypeLabel = (k) => CLIP_TYPES.find((c) => c.key === k)?.label || k

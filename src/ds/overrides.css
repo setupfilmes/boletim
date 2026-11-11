@@ -8,3 +8,13 @@
 .bc-sr { top: 0; left: 0; }
 /* indicador completo dentro de colunas estreitas (lateral do computador) quebra linha em vez de vazar */
 .desk-sync .bc-sync { max-width: 100%; height: auto; min-height: var(--alvo-min); white-space: normal; text-align: left; }
+
+/* Estrelas da continuidade (StarRating) — 5 = VALEU, 1–4 = RESERVA */
+.bc-stars { display: flex; align-items: center; gap: 2px; }
+.bc-stars__btn { display: inline-flex; align-items: center; justify-content: center; width: 48px; height: 48px;
+  border: 0; background: transparent; color: var(--tinta-suave, var(--borda)); cursor: pointer; border-radius: var(--raio-m); }
+.bc-stars__btn.is-on { color: var(--tinta); }
+.bc-stars__btn.is-on .bc-icon { fill: currentColor; }
+.bc-stars__btn:disabled { cursor: default; }
+.bc-stars__rot { margin-left: var(--espaco-2); font-weight: 700; font-size: 17px; letter-spacing: .04em; }
+.bc-takerow__estrelas { font-size: 15px; letter-spacing: 1px; color: var(--tinta); white-space: nowrap; }

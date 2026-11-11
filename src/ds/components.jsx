@@ -118,6 +118,22 @@ export function CircleToggle({ on, onChange, compact }) {
   );
 }
 
+// Estrelas da continuidade (qualquer status). Em GOOD: 5 = VALEU, 1–4 = RESERVA. Tocar na estrela marcada apaga.
+export function StarRating({ value, onChange, disabled, rotulo }) {
+  const n = value || 0;
+  return (
+    <div className="bc-stars" role="radiogroup" aria-label="Estrelas do take">
+      {[1, 2, 3, 4, 5].map((i) => (
+        <button key={i} type="button" role="radio" aria-checked={n === i} aria-label={i + (i === 1 ? ' estrela' : ' estrelas')}
+          disabled={disabled} className={cx('bc-stars__btn', i <= n && 'is-on')} onClick={() => onChange && onChange(i === n ? null : i)}>
+          <Icon name="star" size={26} strokeWidth={2.5} />
+        </button>
+      ))}
+      <span className="bc-stars__rot">{rotulo ?? ''}</span>
+    </div>
+  );
+}
+
 export function SegmentToggle({ options, value, onChange, label }) {
   return (
     <div className="bc-seg" role="radiogroup" aria-label={label}>
@@ -483,13 +499,14 @@ export function PlanoRow({ numero, tipo, descricao, takes = 0, circulados = 0, u
   );
 }
 
-export function TakeRow({ take, status, circulado, cam, clipe, lente, tstop, som = 'SYNC', marcas = [], hora, nota, fotos = 0, onPress }) {
+export function TakeRow({ take, status, circulado, estrelas, cam, clipe, lente, tstop, som = 'SYNC', marcas = [], hora, nota, fotos = 0, onPress }) {
   return (
     <button type="button" className={cx('bc-takerow', 'bc-takerow--' + (status ? STATUS[status].key : 'vazio'))} onClick={onPress}>
       <TakeNumber numero={take} circulado={circulado} size="m" label={false} />
       <span className="bc-takerow__meio">
         <span className="bc-takerow__l1">
           <StatusBadge status={status} />
+          {estrelas > 0 && <span className="bc-takerow__estrelas" aria-label={estrelas + ' estrelas'}>{'★'.repeat(estrelas)}</span>}
           {cam && <CameraBadge cam={cam} size="p" />}
           {som === 'MOS' && <Tag icon="mic-off">MOS</Tag>}
           {marcas.map((m) => (

@@ -73,6 +73,11 @@ export function FichaPage() {
             <AutoField label="DIT" value={project.logger} onSave={saveCol('logger')} readOnly={ro} />
           </div>
           <AutoField label="Logger / vídeo assist" value={f.video_assist} onSave={saveFicha('video_assist')} readOnly={ro} />
+          <AutoField label="Continuidade" value={f.continuidade} onSave={saveFicha('continuidade')} readOnly={ro} />
+        </Bloco>
+        <Bloco titulo="Personagens" dica="Aparecem como botões na tela da continuidade e vão para as Keywords do Resolve. Separe por vírgula.">
+          <AutoField label="Personagens" value={(project.kit?.personagens || []).join(', ')} readOnly={ro}
+            onSave={(v) => update('projects', project.id, { kit: { ...project.kit, personagens: [...new Set(v.split(',').map((x) => x.trim()).filter(Boolean))] } })} />
         </Bloco>
         <Bloco titulo="Câmeras" dica={cams.length >= 2 ? 'Multicâmera: cada take é registrado por câmera, com status próprio.' : undefined}>
           {cams.map((c) => (

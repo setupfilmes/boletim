@@ -112,12 +112,18 @@ export default function Projects() {
                 notify('Projeto de demonstração criado')
                 nav(`/p/${p.id}`)
               }} data-testid="empty-demo">Ver demonstração preenchida (5 diárias)</Btn>
+              <Btn variant="ghost" onClick={() => nav('/importar')} data-testid="empty-import">Importar do DaVinci Resolve</Btn>
             </div>}>
             Crie seu primeiro projeto. Tudo fica salvo no celular e sincroniza quando houver internet.
           </Empty>
         )}
         <div className="grid grid-cols-1 gap-2" data-testid="projects">{list.map(card)}</div>
-        {projects?.length > 0 && <div className="mt-3"><Button block icon="plus" onClick={() => setForm(true)} data-testid="new-project">Novo projeto</Button></div>}
+        {projects?.length > 0 && (
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            <Button block icon="plus" onClick={() => setForm(true)} data-testid="new-project">Novo projeto</Button>
+            <Button block icon="file-spreadsheet" onClick={() => nav('/importar')} data-testid="import-project">Importar do Resolve</Button>
+          </div>
+        )}
       </main>
       <ProjectForm open={form} onClose={() => setForm(false)} onSaved={(p) => nav(`/p/${p.id}`)} />
     </>

@@ -3,16 +3,17 @@ import { useNavigate, useParams, useSearchParams } from 'react-router'
 import { TopBar, Btn, Empty, Sheet, TextInput, TextArea, IconBtn, useDialog } from '../components/ui'
 import { IconEdit, IconTrash, IconX } from '../components/icons'
 import {
-  Button, StatusPicker, TakeNumber, CircleToggle, SegmentToggle, MarkChips, FieldTile, CameraTabs, CameraBadge,
+  Button, StatusPicker, StarRating, TakeNumber, SegmentToggle, MarkChips, FieldTile, CameraTabs, CameraBadge,
   TakeRow, Icon, EmptyState,
 } from '../ds/components'
 import PickerSheet from '../components/PickerSheet'
 import TakePhotos from '../components/TakePhotos'
+import ContinuityBlock from '../components/ContinuityBlock'
 import { useTakePhotos } from '../lib/photos'
 import { useProject, useScene, useShot, useTakesByShots, useTakesByProject, useKit, useRole, kitOptions, useShots } from '../lib/hooks'
 import { createNextTake, previewNextTake, addCameraToTake, deleteTakes, update, updateExtra, planClipShift } from '../lib/repo'
-import { projectFields, extraField, extraText, isEmpty, MARKS, formatTc } from '../lib/fields'
-import { groupTakes, isMulticam, projectCameras, linkedShots, shotCameras, shotLabel as labelOf } from '../lib/cameras'
+import { projectFields, extraField, extraText, isEmpty, MARKS, formatTc, ratingOf, CLIP_TYPES, clipTypeLabel } from '../lib/fields'
+import { groupTakes, findTake, isMulticam, projectCameras, linkedShots, shotCameras, shotLabel as labelOf } from '../lib/cameras'
 import { useAuth } from '../auth'
 import { fmtDate, fmtTime, joinFilters, vibrate, incrCode, todayISO, nowISO } from '../lib/util'
 import { useDays, dayLabel, whenForDay } from '../lib/days'
@@ -93,16 +94,20 @@ export default function Shot() {
   const [editGroup, setEditGroup] = useState(null)
   const [editShot, setEditShot] = useState(false)
   const [showAll, setShowAll] = useState(false)
+  // Função de quem está usando este aparelho no projeto: câmera (dados de câmera) ou continuidade. Fica no aparelho.
+  const funcKey = `boletim.funcao.${projectId}`
+  const [funcao, setFuncaoState] = useState(() => { try { return localStorage.getItem(funcKey) || 'camera' } catch { return 'camera' } })
+  const setFuncao = (v) => { setFuncaoState(v); try { localStorage.setItem(funcKey, v) } catch { /* ignore */ } }
 
   if (shot === undefined || scene === undefined || project === undefined) return null
   if (!shot || shot.deleted) return (<><TopBar title="Plano" back={`/p/${projectId}/s/${sceneId}${q}`} /><Empty title="Plano não encontrado" /></>)
 
   const label = labelOf(scene, shot)
   const backTo = `/p/${projectId}/s/${sceneId}${q}`
-  const nextNumber = (allTakes || []).reduce((m, t) => Math.max(m, t.take_number), 0) + 1
+  const nextNumber = (allTakes || []).filter((t) => !t.clip_type).reduce((m, t) => Math.max(m, t.take_number), 0) + 1
 
   // linhas (uma por câmera) do take mostrado
-  const realGroup = mode === 'take' ? groups.find((g) => g.number === takeParam) : curNum ? groups.find((g) => g.number === curNum) : null
+  const realGroup = mode === 'take' ? findTake(groups, takeParam) : curNum ? findTake(groups, curNum) : null
   const rows = realGroup?.rows || (mode === 'registro' ? draft : null) || []
   const number = realGroup?.number ?? rows[0]?.take_number
   const active = rows.find((r) => r.camera === cam) || rows[0]
@@ -129,6 +134,10 @@ export default function Shot() {
   const stamp = (id) => (mode === 'take' ? updateExtra(id, 'corrigido_em', nowISO()) : null)
   const setField = (row, field, value) => withRow(row, async (r) => { await update('takes', r.id, { [field]: value }); await stamp(r.id) })
   const setExtra = (row, key, value) => withRow(row, async (r) => { await updateExtra(r.id, key, value); await stamp(r.id) })
+  const setExtraAll = async (key, value) => {
+    const list = isDraft ? await materialize() : rows
+    for (const r of list) { await updateExtra(r.id, key, value); await stamp(r.id) }
+  }
   const setAll = async (field, value) => {
     const list = isDraft ? await materialize() : rows
     for (const r of list) { await update('takes', r.id, { [field]: value }); await stamp(r.id) }
@@ -138,7 +147,7 @@ export default function Shot() {
   const prevOf = (row) => {
     if (!row) return null
     for (const g of groups) {
-      if (g.number >= row.take_number) continue
+      if (g.clipType || g.number >= row.take_number) continue
       const p = g.rows.find((r) => (r.camera || null) === (row.camera || null) && r.shot_id === row.shot_id) || g.rows.find((r) => (r.camera || null) === (row.camera || null))
       if (p) return p
     }
@@ -165,6 +174,14 @@ export default function Shot() {
   }
 
   // Próximo: o take atual fica gravado (com ou sem status) e a tela vai para o rascunho do seguinte
+  // Falso REC / ensaio / wild / insert: o clipe atual vira registro à parte e o take continua com o mesmo número
+  const marcarClipe = async (tipo) => {
+    vibrate(30)
+    const created = await materialize()
+    for (const r of created) await update('takes', r.id, { clip_type: tipo, status: null })
+    setSalvo({ number, resumo: `${clipTypeLabel(tipo)} registrado (${created.map((r) => r.clip).filter(Boolean).join(', ') || 'sem clipe'}) · o take continua ${number}` })
+    setCurNum(null); setDraft(null); setDraftKey((k) => k + 1); setCam(null)
+  }
   const proximo = async () => {
     vibrate(30)
     const shown = rows
@@ -197,11 +214,13 @@ export default function Shot() {
           {g2.length === 0 && <EmptyState icon="clapperboard" title="Nenhum take ainda">{canEdit ? `Toque em Gravar ${nextNumber} para registrar o primeiro.` : 'Ainda não há takes neste plano.'}</EmptyState>}
           <div className="border-t-2 border-line" data-testid="takes">
             {g2.map((g) => g.rows.map((r) => (
-              <TakeRow key={r.id} take={g.number} status={UP[r.status] || null} circulado={!!r.circled} cam={g.rows.length > 1 || multi ? r.camera || undefined : undefined}
+              <TakeRow key={r.id} take={g.number} status={UP[r.status] || null} estrelas={ratingOf(r)} cam={g.rows.length > 1 || multi ? r.camera || undefined : undefined}
                 clipe={r.clip} lente={r.lens} tstop={r.t_stop} som={r.sound === 'mos' ? 'MOS' : 'SYNC'} marcas={(r.marks || []).map(markCodeOf)}
-                hora={`${fmtTime(r.recorded_at)}${r.extra?.corrigido_em ? ' ✎' : ''}`} nota={r.notes || undefined}
+                hora={`${fmtTime(r.recorded_at)}${r.extra?.corrigido_em ? ' ✎' : ''}`}
+                nota={g.clipType ? [clipTypeLabel(g.clipType).toUpperCase(), r.notes].filter(Boolean).join(' · ') : r.notes || undefined}
                 fotos={photos.filter((p) => p.take_id === r.id).length}
-                onPress={() => setParams({ ...(day ? { dia: day.id } : {}), take: String(g.number), ...(r.camera ? { cam: r.camera } : {}) })} />
+                onPress={() => (g.clipType ? canEdit && setEditGroup(g)
+                  : setParams({ ...(day ? { dia: day.id } : {}), take: String(g.number), ...(r.camera ? { cam: r.camera } : {}) }))} />
             )))}
           </div>
         </main>
@@ -221,7 +240,7 @@ export default function Shot() {
     return (<><TopBar title={`Plano ${label}`} back={backTo} /><Empty title={`Take ${takeParam} não encontrado`}>Ele pode ter sido excluído ou renumerado.</Empty></>)
   }
 
-  const tabs = rows.map((r) => ({ id: r.camera || '—', plano: labelOf(scene, linked.find((s) => s.id === r.shot_id) || shot), status: UP[r.status] || null, circulado: !!r.circled }))
+  const tabs = rows.map((r) => ({ id: r.camera || '—', plano: labelOf(scene, linked.find((s) => s.id === r.shot_id) || shot), status: UP[r.status] || null }))
   const missingCams = multi ? projectCameras(project).map((c) => c.id).filter((c) => !rows.some((r) => r.camera === c)) : []
   const activePhotos = active && !active._draft ? photos.filter((p) => p.take_id === active.id) : []
   const photoRow = photoRowId ? (allTakes || []).find((t) => t.id === photoRowId) : null
@@ -274,13 +293,12 @@ export default function Shot() {
 
           <div className="bc-rec__take">
             <div>
-              <TakeNumber numero={number} circulado={!!active.circled} />
+              <TakeNumber numero={number} />
               <div className="mt-1 pl-1 font-mono text-[15px] text-muted">
                 {isDraft ? 'em andamento' : `${fmtTime(active.recorded_at)} · ${fmtDate(active.shoot_date)}`}
               </div>
             </div>
             <div className="bc-rec__takedir">
-              <CircleToggle on={!!active.circled} onChange={(v) => canEdit && (vibrate(), setField(active, 'circled', v))} />
               <SegmentToggle label="Som" value={active.sound === 'mos' ? 'MOS' : 'SYNC'}
                 onChange={(v) => canEdit && (vibrate(), setAll('sound', v === 'MOS' ? 'mos' : 'sync'))}
                 options={[{ value: 'SYNC', icon: 'mic' }, { value: 'MOS', icon: 'mic-off' }]} />
@@ -292,6 +310,13 @@ export default function Shot() {
               onChange={(codes) => canEdit && (vibrate(), setAll('marks', codes.length ? codes.map(markKeyOf) : null))} />
           </div>
 
+          <SegmentToggle label="Função" value={funcao === 'continuidade' ? 'Continuidade' : 'Câmera'}
+            onChange={(v) => setFuncao(v === 'Continuidade' ? 'continuidade' : 'camera')}
+            options={[{ value: 'Câmera', icon: 'camera' }, { value: 'Continuidade', icon: 'notebook-pen' }]} />
+
+          {funcao === 'continuidade' ? (
+            <ContinuityBlock project={project} active={active} canEdit={canEdit} setAll={setAll} setExtraAll={setExtraAll} />
+          ) : (
           <div className="bc-rec__bloco">
             <div className="bc-rec__secrot">
               <span>Dados {multi ? `da câmera ${active.camera}` : 'de câmera'}</span>
@@ -309,6 +334,7 @@ export default function Shot() {
               })}
             </div>
           </div>
+          )}
 
           <div className="bc-rec__extras">
             <Button block icon={active.notes ? 'check' : 'notebook-pen'} disabled={!canEdit && !active.notes}
@@ -320,6 +346,13 @@ export default function Shot() {
             </Button>
           </div>
           {active.notes && <p className="-mt-2 whitespace-pre-wrap text-[15px] text-muted">{active.notes}</p>}
+          {active.comments && <p className="-mt-2 whitespace-pre-wrap text-[15px] text-muted" data-testid="comments"><b>Correção / pós:</b> {active.comments}</p>}
+          {mode === 'registro' && canEdit && (
+            <div className="grid grid-cols-2 gap-2" data-testid="clip-types">
+              <Button size="p" variant="fantasma" onClick={() => marcarClipe('falso_rec')} data-testid="falso-rec">Foi falso REC</Button>
+              <Button size="p" variant="fantasma" onClick={() => marcarClipe('ensaio')}>Foi ensaio</Button>
+            </div>
+          )}
           {!isDraft && canEdit && (
             <Button block variant="fantasma" size="p" icon="pencil" onClick={() => setEditGroup(realGroup)} data-testid="take-options">
               Número, diária, câmeras ou excluir o take {number}
@@ -335,6 +368,9 @@ export default function Shot() {
             )}
             <StatusPicker value={UP[active.status] || null} disabled={!canEdit}
               onChange={(v) => { vibrate(); setField(active, 'status', DOWN[v] || null) }} />
+            <StarRating value={ratingOf(active)} disabled={!canEdit}
+              rotulo={active.status === 'good' ? (ratingOf(active) >= 5 ? 'VALEU' : 'RESERVA') : ''}
+              onChange={(n) => { vibrate(); setField(active, 'rating', n) }} />
             {mode === 'registro' ? (
               <Button variant="primario" size="g" block iconRight="arrow-right" onClick={proximo} data-testid="next-take">
                 Próximo · Take {(number || nextNumber) + 1}
@@ -481,25 +517,36 @@ function TakeEditSheet({ group, onClose, groups, onDeleted }) {
   const { confirm, notify } = useDialog()
   const [num, setNum] = useState(String(group.number))
   const [date, setDate] = useState(group.rows[0].shoot_date)
+  const [kind, setKind] = useState(group.clipType || '')
   const ids = group.rows.map((r) => r.id)
   const save = async () => {
     const n = parseInt(num, 10)
     if (!(n > 0)) return notify('Número inválido', 'error')
-    if (groups.some((g) => g.number === n && g.number !== group.number)) return notify(`O take ${n} já existe neste plano`, 'error')
+    if (!kind && groups.some((g) => g.number === n && !g.clipType && g !== group)) return notify(`O take ${n} já existe neste plano`, 'error')
     for (const r of group.rows) {
-      await update('takes', r.id, { take_number: n, shoot_date: date || r.shoot_date })
+      await update('takes', r.id, { take_number: n, shoot_date: date || r.shoot_date, clip_type: kind || null })
       await updateExtra(r.id, 'corrigido_em', nowISO())
     }
     onClose()
   }
   const many = group.rows.length > 1
   return (
-    <Sheet open onClose={onClose} title={`Take ${group.number}`}
+    <Sheet open onClose={onClose} title={group.clipType ? `${clipTypeLabel(group.clipType)} (take ${group.number})` : `Take ${group.number}`}
       footer={<Btn full size="lg" onClick={save}>Salvar</Btn>}>
       <div className="grid gap-4">
         <div className="grid grid-cols-2 gap-3">
           <TextInput label="Nº do take" inputMode="numeric" value={num} onChange={(e) => setNum(e.target.value)} />
           <TextInput label="Diária (data)" type="date" value={date || ''} onChange={(e) => setDate(e.target.value)} />
+        </div>
+        <div role="group" aria-label="Tipo do clipe">
+          <div className="mb-1.5 text-[13px] font-bold uppercase tracking-[.07em] text-muted">Tipo do clipe</div>
+          <div className="flex flex-wrap gap-2">
+            {[{ key: '', label: 'Take' }, ...CLIP_TYPES].map((c) => (
+              <button key={c.key} type="button" aria-pressed={kind === c.key} onClick={() => setKind(c.key)}
+                className={`min-h-12 rounded-[10px] border-2 px-3 font-bold ${kind === c.key ? 'border-ink bg-ink text-bg' : 'border-borda bg-surface'}`}>{c.label}</button>
+            ))}
+          </div>
+          <p className="mt-1 text-[15px] text-muted">Falso REC, ensaio, wild e insert gastam número de clipe, não de take.</p>
         </div>
         {many && group.rows.map((r) => (
           <Btn key={r.id} variant="ghost" onClick={async () => {

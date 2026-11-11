@@ -107,7 +107,7 @@ export async function deleteShot(id) {
 }
 
 // ---------- Takes ----------
-export const STICKY_FIELDS = ['camera', 'roll', 'lens', 't_stop', 'filters', 'focus', 'iso', 'shutter', 'fps', 'wb', 'sound']
+export const STICKY_FIELDS = ['camera', 'roll', 'lens', 't_stop', 'filters', 'focus', 'iso', 'shutter', 'fps', 'wb', 'sound', 'characters']
 const STICKY_EXTRA = EXTRA_FIELDS.filter((f) => f.sticky).map((f) => f.key)
 
 // Campos que costumam ser iguais entre as câmeras do set: câmera sem histórico herda de qualquer câmera
@@ -144,7 +144,7 @@ function takeRow(shot, inProject, number, camera, when) {
   const lastOnCard = inProject.find((t) => same(t) && (t.roll || null) === (sticky.roll || null))
   return {
     project_id: shot.project_id, scene_id: shot.scene_id, shot_id: shot.id, take_number: number,
-    shoot_date: when.date, recorded_at: when.at, status: null, notes: null, circled: false, marks: null,
+    shoot_date: when.date, recorded_at: when.at, status: null, rating: null, notes: null, marks: null,
     clip: lastOnCard?.clip ? incrCode(lastOnCard.clip) : null,
     created_by: currentUserId(), ...sticky,
   }
@@ -154,7 +154,8 @@ function takeRow(shot, inProject, number, camera, when) {
 async function planNextTake(shot, project, linked, at) {
   const inProject = await projectTakes(shot.project_id)
   const ids = new Set(linked.map((s) => s.id))
-  const inGroup = inProject.filter((t) => ids.has(t.shot_id))
+  // falso REC / ensaio / wild / insert gastam número de clipe, não de take
+  const inGroup = inProject.filter((t) => ids.has(t.shot_id) && !t.clip_type)
   const last = inGroup.length ? Math.max(...inGroup.map((t) => t.take_number)) : 0
   const when = at || { date: todayISO(), at: nowISO() }
   if (!isMulticam(project)) return [takeRow(shot, inProject, last + 1, undefined, when)]
@@ -164,7 +165,7 @@ async function planNextTake(shot, project, linked, at) {
   for (const s of linked) {
     let cams = shotCameras(s)?.filter((c) => all.includes(c))
     if (!cams?.length) {
-      const inShot = inProject.filter((t) => t.shot_id === s.id)
+      const inShot = inProject.filter((t) => t.shot_id === s.id && !t.clip_type)
       const lastInShot = inShot.length ? Math.max(...inShot.map((t) => t.take_number)) : 0
       const ref = lastInShot ? inShot.filter((t) => t.take_number === lastInShot)
         : linked.length === 1 && inProject[0] ? inProject.filter((t) => t.shot_id === inProject[0].shot_id && t.take_number === inProject[0].take_number) : []

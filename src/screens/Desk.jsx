@@ -11,7 +11,7 @@ import { useTakePhotos } from '../lib/photos'
 import { update, updateExtra } from '../lib/repo'
 import { groupTakes, isMulticam, linkedShots, shotLabel } from '../lib/cameras'
 import { statsByScene, sceneCardProps } from '../lib/stats'
-import { MARKS } from '../lib/fields'
+import { MARKS, ratingOf, clipTypeLabel } from '../lib/fields'
 import { buildPdf, buildCsv, buildDitCsv, buildAle, shareFile, downloadFile } from '../lib/export'
 import { fmtDate, fmtTime, todayISO, plural, joinFilters, nowISO } from '../lib/util'
 import { weekday, DayForm } from './Day'
@@ -79,6 +79,7 @@ export default function Desk({ project, canEdit, role }) {
           {navItem('relatorios', 'file-text', 'Relatórios', () => go({ ver: 'relatorios' }), view === 'relatorios')}
           {navItem('equipe', 'users', 'Equipe', () => nav(`/p/${project.id}/equipe`), false)}
           {navItem('ficha', 'settings', 'Ficha técnica', () => nav(`/p/${project.id}/ficha`), false)}
+          {navItem('cartao', 'folder-open', 'Conferir cartão', () => nav(`/p/${project.id}/cartao`), false)}
         </nav>
         <div className="mt-2 text-[13px] font-bold uppercase tracking-[.07em] text-muted">Diárias</div>
         <div className="grid gap-1" data-testid="desk-days">
@@ -239,7 +240,7 @@ function SceneWork({ project, scene, shots, shot, day, takes, canEdit, onShot, o
 // Tabela de takes: célula a célula. Enter (ou clique) edita; Enter salva e desce; Tab salva e vai para a direita; Esc cancela.
 const COLS = [
   { k: 'status', label: 'Status', w: 'min-w-32', kind: 'status' },
-  { k: 'circled', label: '★', w: 'w-12', kind: 'circle' },
+  { k: 'rating', label: '★', w: 'w-16', kind: 'rating' },
   { k: 'roll', label: 'Rolo', w: 'w-20' },
   { k: 'clip', label: 'Clipe', w: 'w-28' },
   { k: 'lens', label: 'Lente', w: 'w-24' },
@@ -265,12 +266,13 @@ function TakesTable({ project, scene, shots, takes, canEdit, photos }) {
   const inputRef = useRef(null)
   const moving = useRef(false) // Enter/Tab já salvaram: o blur da célula antiga não salva de novo
   useEffect(() => { inputRef.current?.focus(); inputRef.current?.select?.() }, [edit])
-  const editable = COLS.filter((c) => !['circle', 'sound'].includes(c.kind))
+  const editable = COLS.filter((c) => !['sound'].includes(c.kind))
   const text = (r, c) => {
     const v = r[c.k]
     if (c.kind === 'list') return joinFilters(v)
     if (c.kind === 'marks') return (v || []).map(markCode).join(' ')
     if (c.kind === 'status') return UP[v] || ''
+    if (c.kind === 'rating') return ratingOf(r) ?? ''
     return v ?? ''
   }
   const parse = (c, s) => {
@@ -278,10 +280,11 @@ function TakesTable({ project, scene, shots, takes, canEdit, photos }) {
     if (c.kind === 'list') return t ? t.split('+').map((x) => x.trim()).filter(Boolean) : []
     if (c.kind === 'marks') { const ks = t.split(/[\s,]+/).map(markKey).filter(Boolean); return ks.length ? ks : null }
     if (c.kind === 'status') return { GOOD: 'good', NG: 'ng', CHECK: 'check', G: 'good', N: 'ng', C: 'check' }[t.toUpperCase()] || null
+    if (c.kind === 'rating') { const n = parseInt(t, 10); return n >= 1 && n <= 5 ? n : null }
     return t || null
   }
   const save = async (r, c, value) => {
-    await update('takes', r.id, { [c.k]: value })
+    await update('takes', r.id, { [c.k]: value }) // estrelas e status são independentes
     await updateExtra(r.id, 'corrigido_em', nowISO()) // corrigido depois de gravado (sai no boletim com *)
   }
   const start = (r, c) => { if (!canEdit) return; setEdit({ id: r.id, k: c.k }); setDraft(String(text(r, c))) }
@@ -323,20 +326,10 @@ function TakesTable({ project, scene, shots, takes, canEdit, photos }) {
             const firstOfTake = i === 0 || rows[i - 1].take_number !== r.take_number
             return (
               <tr key={r.id} className={`border-b border-line font-mono text-[15px] ${r.take_number % 2 ? 'bg-surface' : 'bg-surface2/50'}`}>
-                <td className="sticky left-0 bg-inherit px-3 py-1">{firstOfTake && <TakeNumber numero={r.take_number} circulado={!!r.circled} size="p" label={false} />}</td>
+                <td className="sticky left-0 bg-inherit px-3 py-1">{r.clip_type ? <span className="font-sans text-[13px] font-bold uppercase">{clipTypeLabel(r.clip_type)}</span> : firstOfTake && <TakeNumber numero={r.take_number} size="p" label={false} />}</td>
                 {multi && <td className="px-2"><CameraBadge cam={r.camera || '—'} size="p" /></td>}
                 {COLS.map((c) => {
                   const editing = edit?.id === r.id && edit?.k === c.k
-                  if (c.kind === 'circle') {
-                    return (
-                      <td key={c.k} className="px-2">
-                        <button type="button" disabled={!canEdit} aria-pressed={!!r.circled} aria-label={`Circular take ${r.take_number}`}
-                          onClick={() => save(r, c, !r.circled)} className="flex h-10 w-10 items-center justify-center rounded-[10px] border-2 border-borda">
-                          <Icon name="star" size={18} strokeWidth={2.5} style={r.circled ? { fill: 'currentColor' } : undefined} />
-                        </button>
-                      </td>
-                    )
-                  }
                   if (c.kind === 'sound') {
                     return (
                       <td key={c.k} className="px-2">
@@ -364,7 +357,9 @@ function TakesTable({ project, scene, shots, takes, canEdit, photos }) {
                       ) : (
                         <button type="button" onClick={() => start(r, c)} disabled={!canEdit} data-testid={`cell-${c.k}`}
                           className="flex min-h-10 w-full items-center rounded-[8px] px-1 text-left hover:bg-surface2 focus:outline-[3px] focus:outline-foco">
-                          {c.kind === 'status' ? <StatusBadge status={UP[r.status] || null} compact /> : (
+                          {c.kind === 'status' ? <StatusBadge status={UP[r.status] || null} compact /> : c.kind === 'rating' ? (
+                            <span className="whitespace-nowrap font-sans" title="GOOD: 1–4 = reserva, 5 = valeu">{ratingOf(r) ? '★'.repeat(ratingOf(r)) : <span className="text-faint">—</span>}</span>
+                          ) : (
                             <span className={c.k === 'notes' ? 'font-sans whitespace-normal' : 'whitespace-nowrap'}>{text(r, c) || <span className="text-faint">—</span>}</span>
                           )}
                         </button>

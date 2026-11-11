@@ -24,7 +24,9 @@ export function cameraOrder(project) {
 
 // Mesmo take da claquete (todas as câmeras). Com `shotsById`, planos vinculados (link_id) contam como um só:
 // 12A take 3 (câmera A) e 12B take 3 (câmera B) são a mesma claquete.
-export const takeKey = (t, shotsById) => `${shotsById?.[t.shot_id]?.link_id || t.shot_id}#${t.take_number}`
+// Clipe que não é take (falso REC, ensaio, wild, insert) nunca se junta a um take: chave própria.
+export const takeKey = (t, shotsById) => (t.clip_type ? `clip#${t.id}`
+  : `${shotsById?.[t.shot_id]?.link_id || t.shot_id}#${t.take_number}`)
 
 // Planos que rodam junto com este (mesmo link_id, mesma cena), incluindo ele mesmo, em ordem de código
 export function linkedShots(shot, shots) {
@@ -39,18 +41,22 @@ export const shotCameras = (shot) => (Array.isArray(shot?.cameras) && shot.camer
 // "12A", "3.1" — número da cena + código do plano
 export const shotLabel = (scene, shot) => `${scene?.number ?? ''}${/^\d/.test(shot?.code ?? '') ? '.' : ''}${shot?.code ?? ''}`
 
-// Agrupa linhas de take por número (mais recente primeiro); cada grupo tem as linhas ordenadas por câmera
+// Agrupa linhas de take por número (mais recente primeiro); cada grupo tem as linhas ordenadas por câmera.
+// Clipe com clip_type (falso REC, ensaio…) é um grupo à parte (clipType), antes do take de mesmo número.
 export function groupTakes(takes, project) {
   const cmp = cameraOrder(project)
   const m = new Map()
   for (const t of takes || []) {
-    if (!m.has(t.take_number)) m.set(t.take_number, [])
-    m.get(t.take_number).push(t)
+    const k = t.clip_type ? `c:${t.id}` : t.take_number
+    if (!m.has(k)) m.set(k, { number: t.take_number, clipType: t.clip_type || null, rows: [], at: t.recorded_at || t.created_at || '' })
+    m.get(k).rows.push(t)
   }
-  return [...m.entries()]
-    .sort((a, b) => b[0] - a[0])
-    .map(([number, rows]) => ({ number, rows: rows.sort((a, b) => cmp(a.camera, b.camera)) }))
+  return [...m.values()]
+    .sort((a, b) => b.number - a.number || (a.clipType ? 1 : 0) - (b.clipType ? 1 : 0) || String(b.at).localeCompare(String(a.at)))
+    .map((g) => ({ ...g, rows: g.rows.sort((a, b) => cmp(a.camera, b.camera)) }))
 }
+// Grupo do take N (ignora falso REC / ensaio com o mesmo número)
+export const findTake = (groups, n) => groups.find((g) => g.number === n && !g.clipType)
 
 // Quantos takes distintos (claquete) e quantos têm alguma câmera GOOD
 export function countTakes(rows, shotsById) {

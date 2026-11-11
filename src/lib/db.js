@@ -51,10 +51,12 @@ export const COLUMNS = {
     'deleted', 'created_at'],
   // link_id/cameras só vão no envio quando existem na linha (planos antigos/sem vínculo não mandam essas colunas)
   shots: ['id', 'project_id', 'scene_id', 'code', 'shot_type', 'description', 'sort_order', 'created_by', 'deleted',
-    'created_at', 'link_id', 'cameras'],
+    'created_at', 'link_id', 'cameras', 'edit_note'],
   takes: ['id', 'project_id', 'scene_id', 'shot_id', 'take_number', 'shoot_date', 'camera', 'roll', 'clip', 'lens',
     't_stop', 'filters', 'focus', 'iso', 'shutter', 'fps', 'wb', 'status', 'notes', 'recorded_at', 'created_by',
-    'deleted', 'created_at', 'sound', 'circled', 'marks', 'extra'],
+    'deleted', 'created_at', 'sound', 'circled', 'marks', 'extra',
+    // continuidade / Resolve (atualizacao-2026-11-11): só vão no envio quando existem na linha
+    'rating', 'clip_type', 'duration', 'comments', 'slate_as', 'characters', 'file_name'],
   kit_items: ['id', 'owner_id', 'category', 'value', 'sort_order', 'deleted', 'created_at'],
   take_photos: ['id', 'project_id', 'take_id', 'path', 'width', 'height', 'caption', 'created_by', 'deleted', 'created_at'],
   shoot_days: ['id', 'project_id', 'number', 'date', 'notes', 'created_by', 'deleted', 'created_at'],

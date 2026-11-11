@@ -14,6 +14,8 @@ import { FichaPage, EquipePage } from './screens/ProjectPages'
 import Shot from './screens/Shot'
 import Kit from './screens/Kit'
 import Account from './screens/Account'
+import ImportResolve from './screens/ImportResolve'
+import CardCheck from './screens/CardCheck'
 import ShareWatcher from './components/ShareWatcher'
 import ErrorBoundary from './components/ErrorBoundary'
 import InviteAcceptor from './components/InviteAcceptor'
@@ -58,10 +60,12 @@ function Gate() {
         <Route path="/p/:projectId/d/:dayId" element={<Day />} />
         <Route path="/p/:projectId/ficha" element={<FichaPage />} />
         <Route path="/p/:projectId/equipe" element={<EquipePage />} />
+        <Route path="/p/:projectId/cartao" element={<CardCheck />} />
         <Route path="/p/:projectId/s/:sceneId" element={<Scene />} />
         <Route path="/p/:projectId/s/:sceneId/sh/:shotId" element={<Shot />} />
         <Route path="/kit" element={<Kit />} />
         <Route path="/conta" element={<Account />} />
+        <Route path="/importar" element={<ImportResolve />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       </SafeRoutes>

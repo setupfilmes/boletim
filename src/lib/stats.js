@@ -1,6 +1,7 @@
 // Contagens por cena para os cartões (CenaCard): planos com take, takes da claquete, GOOD e circulados.
 // `date` limita a uma diária. Planos vinculados contam como uma claquete (takeKey).
 import { takeKey } from './cameras'
+import { resultOf } from './fields'
 
 export function statsByScene(takes, shots, date = null) {
   const shotsById = Object.fromEntries((shots || []).map((s) => [s.id, s]))
@@ -12,7 +13,7 @@ export function statsByScene(takes, shots, date = null) {
     o.planos.add(t.shot_id)
     o.takes.add(k)
     if (t.status === 'good') o.good.add(k)
-    if (t.circled) o.circ.add(k)
+    if (resultOf(t) === 'valeu') o.circ.add(k) // "circulados" = takes que valeram (GOOD 5★)
   }
   const out = {}
   for (const [id, o] of Object.entries(acc)) {

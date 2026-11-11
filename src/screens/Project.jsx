@@ -89,6 +89,7 @@ export default function Project() {
           <Button block icon="folder-open" onClick={() => nav('/')}>Projetos</Button>
           <Button block icon="file-text" onClick={() => nav(`/p/${project.id}/ficha`)} data-testid="menu-ficha">Ficha técnica</Button>
           <Button block icon="users" onClick={() => nav(`/p/${project.id}/equipe`)} data-testid="menu-equipe">Equipe</Button>
+          <Button block icon="folder-open" onClick={() => nav(`/p/${project.id}/cartao`)} data-testid="menu-cartao">Conferir cartão (DIT)</Button>
           <Button block icon="settings" onClick={() => nav('/conta')}>Conta e sincronização</Button>
           <div className="mt-2 text-[13px] font-bold uppercase tracking-[.07em] text-muted">Tema</div>
           <ThemePicker />

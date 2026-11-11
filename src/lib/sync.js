@@ -51,8 +51,10 @@ export async function syncNow() {
   running = true
   setState({ status: 'syncing', error: null })
   try {
-    await push()
+    // recebe antes de enviar: as mudanças dos outros são mescladas campo a campo nas linhas pendentes
+    // daqui (mergeRow), e o envio leva só o que mudou neste aparelho
     await pull()
+    await push()
     setState({ status: 'idle', lastSync: new Date().toISOString(), error: null })
   } catch (e) {
     const msg = e?.message || String(e)
@@ -65,6 +67,40 @@ export async function syncNow() {
 }
 
 const pick = (row, cols) => Object.fromEntries(cols.filter((c) => c in row).map((c) => [c, row[c] ?? null]))
+
+// ---------- MESCLA POR CAMPO ----------
+// Cada linha guarda em `_base` os valores que o servidor tinha da última vez que conversamos com ele.
+// Campo diferente da base = mudou neste aparelho. Assim duas pessoas editando o mesmo take (o AC muda a lente,
+// a continuidade marca GOOD) não apagam o trabalho uma da outra: cada uma envia só os campos que mexeu.
+// Linhas sem `_base` (criadas aqui e nunca enviadas, ou de antes desta versão) vão inteiras, como antes.
+const same = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null)
+const isObj = (v) => v && typeof v === 'object' && !Array.isArray(v)
+const baseOf = (table, row) => pick(row, COLUMNS[table])
+
+// Campos que mudaram aqui desde a base
+export function changedFields(table, row) {
+  if (!row._base) return null
+  return COLUMNS[table].filter((c) => c in row && !same(row[c], row._base[c]))
+}
+
+// Linha pendente aqui + versão nova do servidor: fica com o servidor, menos o que mudou aqui.
+// Em colunas jsonb de objeto (extra, kit) a mescla é por chave: a LUT de um e a ficha do outro convivem.
+export function mergeRow(table, local, server) {
+  const out = { ...server }
+  for (const c of changedFields(table, local) || []) {
+    const lv = local[c], bv = local._base[c], sv = server[c]
+    if (isObj(lv) && (isObj(bv) || bv == null) && (isObj(sv) || sv == null)) {
+      const m = { ...(sv || {}) }
+      for (const k of new Set([...Object.keys(lv), ...Object.keys(bv || {})])) {
+        if (same(lv[k], bv?.[k])) continue
+        if (lv[k] === undefined) delete m[k]
+        else m[k] = lv[k]
+      }
+      out[c] = m
+    } else out[c] = lv
+  }
+  return { ...out, _dirty: 1, _rev: local._rev || 0, _err: local._err || null, _base: baseOf(table, server) }
+}
 
 // ---------- ENVIO ----------
 // Fotos: a imagem sobe para o Storage antes do registro (quem baixar o registro já encontra o arquivo)
@@ -88,6 +124,14 @@ async function push() {
   for (const table of TABLES) {
     let dirty = await db[table].where('_dirty').equals(1).toArray()
     if (table === 'take_photos') dirty = dirty.filter((r) => !waiting.has(r.id))
+    // linhas que o servidor já conhece: só os campos alterados (update por linha)
+    const known = dirty.filter((r) => r._base)
+    dirty = dirty.filter((r) => !r._base)
+    for (let i = 0; i < known.length; i += 8) {
+      const part = known.slice(i, i + 8)
+      const again = await Promise.all(part.map((r) => pushChanged(table, r)))
+      dirty.push(...part.filter((_, k) => again[k]))
+    }
     for (let i = 0; i < dirty.length; i += 200) {
       const chunk = dirty.slice(i, i + 200)
       const payload = chunk.map((r) => pick(r, COLUMNS[table]))
@@ -108,6 +152,23 @@ async function push() {
       }
     }
   }
+}
+
+// Envia só os campos alterados. Devolve true quando a linha não existe no servidor (vai inteira no upsert).
+async function pushChanged(table, r) {
+  const db = getDb()
+  const fields = changedFields(table, r)
+  if (!fields.length) { await markClean(table, [r]); return false }
+  const { data, error } = await supabase.from(table).update(pick(r, fields)).eq('id', r.id).select('id')
+  if (!error && !data?.length) return true
+  if (!error) {
+    await markClean(table, [r])
+    if (table === 'take_photos') await removeDeletedPhotoFiles([r])
+    return false
+  }
+  if (isNetwork(error)) throw error
+  await db[table].update(r.id, { _err: error.message })
+  return false
 }
 
 // Foto excluída e já registrada na nuvem: apaga o arquivo do Storage e a cópia local
@@ -132,7 +193,7 @@ async function markClean(table, rows) {
       const cur = await db[table].get(sent.id)
       if (!cur || cur._rev !== sent._rev) continue // mudou durante o envio: continua pendente
       if (cur.deleted) await db[table].delete(sent.id)
-      else await db[table].update(sent.id, { _dirty: 0, _err: null })
+      else await db[table].update(sent.id, { _dirty: 0, _err: null, _base: baseOf(table, sent) })
     }
   })
 }
@@ -216,14 +277,18 @@ async function pullAll(table, filter) {
 async function applyRow(table, row) {
   const db = getDb()
   const local = await db[table].get(row.id)
-  if (local?._dirty) return // alteração local pendente vence; será enviada no próximo ciclo
+  if (local?._dirty) {
+    // pendente aqui: com base conhecida, mescla campo a campo; sem base (linha antiga), a local vence
+    if (local._base && !row.deleted) await db[table].put(mergeRow(table, local, row))
+    return
+  }
   if (row.deleted) {
     if (table === 'projects') await removeProjectLocal(row.id)
     else if (local) await db[table].delete(row.id)
     if (table === 'take_photos') await db.photo_blobs.delete(row.id)
     return
   }
-  await db[table].put({ ...row, _dirty: 0, _rev: local?._rev || 0, _err: null })
+  await db[table].put({ ...row, _dirty: 0, _rev: local?._rev || 0, _err: null, _base: baseOf(table, row) })
 }
 
 async function removeProjectLocal(id) {

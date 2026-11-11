@@ -63,9 +63,9 @@ export default function Scene() {
   const openShot = (s, extra = '') => nav(`/p/${projectId}/s/${sceneId}/sh/${s.id}${q}${extra ? (q ? '&' : '?') + extra : ''}`)
   const chipsOf = (info) => {
     const out = []
-    for (const g of info.groups.slice(0, multi ? 3 : 6)) {
+    for (const g of info.groups.filter((x) => !x.clipType).slice(0, multi ? 3 : 6)) {
       for (const r of g.rows) {
-        out.push({ take: g.number, status: r.status ? r.status.toUpperCase() : null, circulado: !!r.circled,
+        out.push({ take: g.number, status: r.status ? r.status.toUpperCase() : null,
           cam: g.rows.length > 1 || multi ? r.camera || undefined : undefined, onPress: () => openShot(shots.find((x) => x.id === r.shot_id) || scene, `take=${g.number}`) })
       }
     }
@@ -146,7 +146,7 @@ export function ShotForm({ open, onClose, shot, scene, shots, project, onCreated
     const code = String(f.code || '').trim()
     if (!code) return notify('Informe o código do plano', 'error')
     if (shots.some((s) => s.code.toLowerCase() === code.toLowerCase() && s.id !== shot?.id)) return notify(`O plano ${code} já existe`, 'error')
-    const data = { code, shot_type: f.shot_type || null, description: f.description || null }
+    const data = { code, shot_type: f.shot_type || null, description: f.description || null, ...(f.edit_note || shot?.edit_note ? { edit_note: f.edit_note || null } : {}) }
     if (multi) data.cameras = f.cams.length ? f.cams : null
     // Vínculo "roda junto com": todos os planos marcados + este ficam com o mesmo link_id
     const before = shot ? linkedShots(shot, shots).filter((s) => s.id !== shot.id).map((s) => s.id) : []
@@ -210,6 +210,8 @@ export function ShotForm({ open, onClose, shot, scene, shots, project, onCreated
           </>
         )}
         <TextArea label="Descrição (opcional)" rows={2} value={f.description || ''} onChange={(e) => setF({ ...f, description: e.target.value })} />
+        <TextArea label="Observação para a montagem (relatório final)" rows={2} value={f.edit_note || ''} onChange={(e) => setF({ ...f, edit_note: e.target.value })}
+          hint="Ex.: TAKE 2 opção de reserva; mesclar início do take 1 com o final do 5." />
       </div>
     </Sheet>
   )
