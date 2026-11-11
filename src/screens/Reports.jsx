@@ -6,9 +6,13 @@ import { buildCsv, buildPdf, buildDitCsv, buildAle, downloadFile, shareFile } fr
 import { fmtDate, todayISO, plural } from '../lib/util'
 import { countTakes } from '../lib/cameras'
 import { useDays, dayLabel } from '../lib/days'
+import { useAuth } from '../auth'
+import { visao } from '../lib/funcao'
 import { buildProgressPdf, buildFinalReportPdf, buildContinuityDailyPdf, buildResolveCsv } from '../lib/continuityReports'
 
 export default function Reports({ project }) {
+  const { user } = useAuth()
+  const vis = visao(project, user?.id)
   const takes = useTakesByProject(project.id)
   const shots = useShotsByProject(project.id)
   const { notify, actionSheet } = useDialog()
@@ -65,10 +69,10 @@ export default function Reports({ project }) {
         ])}>
         Arquivos para DIT / pós
       </Btn>
-      <Btn size="sm" variant="ghost" className="col-span-3" disabled={!!busy} data-testid={`cont-${id}`}
+      {vis.continuidade && <Btn size="sm" variant="ghost" className="col-span-3" disabled={!!busy} data-testid={`cont-${id}`}
         onClick={() => run(`${id}-cont`, buildContinuityDailyPdf, date, 'share')}>
         Boletim da continuidade (PDF)
-      </Btn>
+      </Btn>}
     </div>
   )
 
@@ -94,7 +98,7 @@ export default function Reports({ project }) {
           <Actions date={null} id="all" />
         </Card>
       )}
-      <Card className="p-4">
+      {vis.continuidade && <Card className="p-4">
         <div className="mb-1 font-display text-lg font-extrabold">Continuidade · projeto inteiro</div>
         <div className="mb-3 text-sm text-muted">Modelo dos relatórios entregues pela continuidade.</div>
         <div className="grid grid-cols-1 gap-2">
@@ -102,7 +106,7 @@ export default function Reports({ project }) {
           <Btn size="sm" variant="surface" disabled={!!busy} onClick={() => run('final', buildFinalReportPdf, null, 'share')} data-testid="final">Relatório final (PDF)</Btn>
           <Btn size="sm" variant="surface" disabled={!!busy} onClick={() => run('resolve', buildResolveCsv, null, 'share')} data-testid="resolve">Metadados para o DaVinci Resolve (CSV)</Btn>
         </div>
-      </Card>
+      </Card>}
       {busy && <div className="text-center text-sm text-muted">Gerando…</div>}
     </div>
   )

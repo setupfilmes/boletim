@@ -12,6 +12,8 @@ import { update, updateExtra } from '../lib/repo'
 import { groupTakes, isMulticam, linkedShots, shotLabel } from '../lib/cameras'
 import { statsByScene, sceneCardProps } from '../lib/stats'
 import { MARKS, ratingOf, clipTypeLabel } from '../lib/fields'
+import { visao } from '../lib/funcao'
+import { useAuth } from '../auth'
 import { buildPdf, buildCsv, buildDitCsv, buildAle, shareFile, downloadFile } from '../lib/export'
 import { fmtDate, fmtTime, todayISO, plural, joinFilters, nowISO } from '../lib/util'
 import { weekday, DayForm } from './Day'
@@ -238,7 +240,7 @@ function SceneWork({ project, scene, shots, shot, day, takes, canEdit, onShot, o
 }
 
 // Tabela de takes: célula a célula. Enter (ou clique) edita; Enter salva e desce; Tab salva e vai para a direita; Esc cancela.
-const COLS = [
+const ALL_COLS = [
   { k: 'status', label: 'Status', w: 'min-w-32', kind: 'status' },
   { k: 'rating', label: '★', w: 'w-16', kind: 'rating' },
   { k: 'roll', label: 'Rolo', w: 'w-20' },
@@ -255,10 +257,16 @@ const COLS = [
   { k: 'marks', label: 'Claq.', w: 'w-24', kind: 'marks' },
   { k: 'notes', label: 'Nota', w: 'min-w-48' },
 ]
+// colunas de cada função (o resto — rolo, clipe, som — aparece para todos)
+const CAM_ONLY = new Set(['lens', 't_stop', 'focus', 'filters', 'iso', 'shutter', 'fps', 'wb', 'marks'])
+const CONT_ONLY = new Set(['status', 'rating', 'notes'])
 const markCode = (k) => MARKS.find((m) => m.key === k)?.code || k
 const markKey = (c) => MARKS.find((m) => m.code === c.toUpperCase())?.key || null
 
 function TakesTable({ project, scene, shots, takes, canEdit, photos }) {
+  const { user } = useAuth()
+  const vis = visao(project, user?.id)
+  const COLS = ALL_COLS.filter((c) => (vis.camera || !CAM_ONLY.has(c.k)) && (vis.continuidade || !CONT_ONLY.has(c.k)))
   const multi = isMulticam(project)
   const rows = groupTakes(takes, project).slice().reverse().flatMap((g) => g.rows)
   const [edit, setEdit] = useState(null) // { id, k }

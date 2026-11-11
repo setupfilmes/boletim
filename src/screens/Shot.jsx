@@ -9,6 +9,7 @@ import {
 import PickerSheet from '../components/PickerSheet'
 import TakePhotos from '../components/TakePhotos'
 import ContinuityBlock from '../components/ContinuityBlock'
+import { visao } from '../lib/funcao'
 import { useTakePhotos } from '../lib/photos'
 import { useProject, useScene, useShot, useTakesByShots, useTakesByProject, useKit, useRole, kitOptions, useShots } from '../lib/hooks'
 import { createNextTake, previewNextTake, addCameraToTake, deleteTakes, update, updateExtra, planClipShift } from '../lib/repo'
@@ -94,15 +95,13 @@ export default function Shot() {
   const [editGroup, setEditGroup] = useState(null)
   const [editShot, setEditShot] = useState(false)
   const [showAll, setShowAll] = useState(false)
-  // Função de quem está usando este aparelho no projeto: câmera (dados de câmera) ou continuidade. Fica no aparelho.
-  const funcKey = `boletim.funcao.${projectId}`
-  const [funcao, setFuncaoState] = useState(() => { try { return localStorage.getItem(funcKey) || 'camera' } catch { return 'camera' } })
-  const setFuncao = (v) => { setFuncaoState(v); try { localStorage.setItem(funcKey, v) } catch { /* ignore */ } }
 
   if (shot === undefined || scene === undefined || project === undefined) return null
   if (!shot || shot.deleted) return (<><TopBar title="Plano" back={`/p/${projectId}/s/${sceneId}${q}`} /><Empty title="Plano não encontrado" /></>)
 
   const label = labelOf(scene, shot)
+  // o que esta pessoa vê: função definida pelo dono na aba Equipe (sem função = tudo)
+  const v = visao(project, user?.id)
   const backTo = `/p/${projectId}/s/${sceneId}${q}`
   const nextNumber = (allTakes || []).filter((t) => !t.clip_type).reduce((m, t) => Math.max(m, t.take_number), 0) + 1
 
@@ -300,23 +299,26 @@ export default function Shot() {
             </div>
             <div className="bc-rec__takedir">
               <SegmentToggle label="Som" value={active.sound === 'mos' ? 'MOS' : 'SYNC'}
-                onChange={(v) => canEdit && (vibrate(), setAll('sound', v === 'MOS' ? 'mos' : 'sync'))}
+                onChange={(x) => canEdit && v.continuidade && (vibrate(), setAll('sound', x === 'MOS' ? 'mos' : 'sync'))}
                 options={[{ value: 'SYNC', icon: 'mic' }, { value: 'MOS', icon: 'mic-off' }]} />
             </div>
           </div>
 
+          {v.camera && (
           <div className="bc-rec__bloco" data-testid="marks">
             <MarkChips compacto value={(active.marks || []).map(markCodeOf)}
               onChange={(codes) => canEdit && (vibrate(), setAll('marks', codes.length ? codes.map(markKeyOf) : null))} />
           </div>
+          )}
 
-          <SegmentToggle label="Função" value={funcao === 'continuidade' ? 'Continuidade' : 'Câmera'}
-            onChange={(v) => setFuncao(v === 'Continuidade' ? 'continuidade' : 'camera')}
-            options={[{ value: 'Câmera', icon: 'camera' }, { value: 'Continuidade', icon: 'notebook-pen' }]} />
+          {!v.camera && (
+            <div className="font-mono text-[17px]" data-testid="clip-line">
+              {[active.camera && multi ? `Cam ${active.camera}` : null, active.roll, active.clip].filter(Boolean).join(' · ') || 'Rolo e clipe ainda não anotados'}
+            </div>
+          )}
+          {v.continuidade && <ContinuityBlock project={project} active={active} canEdit={canEdit} setAll={setAll} setExtraAll={setExtraAll} />}
 
-          {funcao === 'continuidade' ? (
-            <ContinuityBlock project={project} active={active} canEdit={canEdit} setAll={setAll} setExtraAll={setExtraAll} />
-          ) : (
+          {v.camera && (
           <div className="bc-rec__bloco">
             <div className="bc-rec__secrot">
               <span>Dados {multi ? `da câmera ${active.camera}` : 'de câmera'}</span>
@@ -337,15 +339,17 @@ export default function Shot() {
           )}
 
           <div className="bc-rec__extras">
+            {v.continuidade && (
             <Button block icon={active.notes ? 'check' : 'notebook-pen'} disabled={!canEdit && !active.notes}
               onClick={() => setText({ row: active, field: 'notes' })} data-testid="note">
-              {active.notes ? 'Nota escrita' : 'Nota'}
+              {active.notes ? 'Observação escrita' : 'Observação'}
             </Button>
+            )}
             <Button block icon="camera" onClick={() => withRow(active, (r) => setPhotoRowId(r.id))} data-testid="photo">
               {activePhotos.length ? `Fotos · ${activePhotos.length}` : 'Foto'}
             </Button>
           </div>
-          {active.notes && <p className="-mt-2 whitespace-pre-wrap text-[15px] text-muted">{active.notes}</p>}
+          {v.continuidade && active.notes && <p className="-mt-2 whitespace-pre-wrap text-[15px] text-muted">{active.notes}</p>}
           {active.comments && <p className="-mt-2 whitespace-pre-wrap text-[15px] text-muted" data-testid="comments"><b>Correção / pós:</b> {active.comments}</p>}
           {mode === 'registro' && canEdit && (
             <div className="grid grid-cols-2 gap-2" data-testid="clip-types">
@@ -360,17 +364,19 @@ export default function Shot() {
           )}
 
           <div className="bc-rec__rodape safe-bottom" data-testid="footer">
-            {canEdit && rows.length > 1 && (
+            {canEdit && v.continuidade && rows.length > 1 && (
               <div className="bc-rec__camrot">
                 <span>Status da câmera <CameraBadge cam={active.camera} size="p" /></span>
                 {active.status && <button type="button" className="bc-link" onClick={() => { vibrate(); setAll('status', active.status) }}>Usar em todas</button>}
               </div>
             )}
+            {v.continuidade && (<>
             <StatusPicker value={UP[active.status] || null} disabled={!canEdit}
-              onChange={(v) => { vibrate(); setField(active, 'status', DOWN[v] || null) }} />
+              onChange={(x) => { vibrate(); setField(active, 'status', DOWN[x] || null) }} />
             <StarRating value={ratingOf(active)} disabled={!canEdit}
               rotulo={active.status === 'good' ? (ratingOf(active) >= 5 ? 'VALEU' : 'RESERVA') : ''}
               onChange={(n) => { vibrate(); setField(active, 'rating', n) }} />
+            </>)}
             {mode === 'registro' ? (
               <Button variant="primario" size="g" block iconRight="arrow-right" onClick={proximo} data-testid="next-take">
                 Próximo · Take {(number || nextNumber) + 1}

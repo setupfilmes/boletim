@@ -7,6 +7,21 @@ import { scheduleSync } from '../lib/sync'
 import { getDb } from '../lib/db'
 import { inviteUrl, inviteText } from '../lib/inviteLink'
 import { fmtDate } from '../lib/util'
+import { FUNCOES, funcaoDe, setFuncao } from '../lib/funcao'
+
+// Função no set (Câmera / Continuidade / Tudo): o dono escolhe; cada tela mostra só o que é da função
+function FuncaoPicker({ project, uid, canEdit }) {
+  const cur = funcaoDe(project, uid) || ''
+  if (!canEdit) return <div className="text-[13px] font-bold uppercase tracking-[.07em] text-muted">Função: {FUNCOES.find((f) => f.value === cur)?.label}</div>
+  return (
+    <div className="mt-1 flex flex-wrap gap-1" role="radiogroup" aria-label="Função no set" data-testid="funcao">
+      {FUNCOES.map((f) => (
+        <button key={f.value} type="button" role="radio" aria-checked={cur === f.value} onClick={() => setFuncao(project, uid, f.value)}
+          className={`min-h-10 rounded-[8px] border-2 px-2 text-[13px] font-bold ${cur === f.value ? 'border-ink bg-ink text-bg' : 'border-borda bg-surface'}`}>{f.label}</button>
+      ))}
+    </div>
+  )
+}
 
 const ROLES = [{ value: 'editor', label: 'Pode editar' }, { value: 'viewer', label: 'Só visualizar' }]
 
@@ -121,7 +136,8 @@ export default function Team({ project, role }) {
       <p className="text-sm text-muted">
         Convide a equipe por um link no WhatsApp (a pessoa entra ou cria a conta ao abrir) ou pelo e-mail da conta.
         Quem pode editar registra takes normalmente e tudo sincroniza entre os aparelhos. O dono pode passar o projeto
-        para outra pessoa da equipe (“Tornar dono”).
+        para outra pessoa da equipe (“Tornar dono”). <b>Função</b>: Câmera vê só os dados de câmera; Continuidade vê
+        status, estrelas, observação, personagens e tempo; Tudo vê tudo. Sem ninguém na Continuidade, a Câmera vê os dois.
       </p>
       {err && <div className="rounded-xl border-2 border-ng p-3 text-sm text-ng">{err}</div>}
       <Card className="divide-y divide-line">
@@ -129,6 +145,7 @@ export default function Team({ project, role }) {
           <div className="min-w-0 flex-1">
             <div className="truncate font-bold">{isOwner ? `${user.email} (você)` : 'Dono do projeto'}</div>
             <div className="text-xs uppercase tracking-widest text-accent">Dono</div>
+            <FuncaoPicker project={project} uid={project.owner_id} canEdit={isOwner} />
           </div>
         </div>
         {members?.map((m) => (
@@ -136,6 +153,7 @@ export default function Team({ project, role }) {
             <div className="min-w-0 flex-1">
               <div className="truncate font-bold">{m.email}{m.user_id === user.id ? ' (você)' : ''}</div>
               <div className="text-[13px] font-bold uppercase tracking-[.07em] text-muted">{m.role === 'viewer' ? 'Só visualizar' : 'Pode editar'}</div>
+              {m.role !== 'viewer' && <FuncaoPicker project={project} uid={m.user_id} canEdit={isOwner} />}
             </div>
             {isOwner && <Btn size="sm" variant="ghost" onClick={() => transfer(m)} data-testid="transfer">Tornar dono</Btn>}
             {(isOwner || m.user_id === user.id) && <IconBtn label="Remover" onClick={() => remove(m)}><IconTrash /></IconBtn>}

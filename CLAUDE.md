@@ -291,7 +291,7 @@ a demonstração "Noite Adentro", `src/lib/demo.js`). Reescrever esses passos an
 
 - **Produção** = ramo `main` → GitHub Actions → GitHub Pages (https://setupfilmes.github.io/boletim/). É o app da
   equipe no dia a dia: só entra o que já foi testado e aprovado pelo Antonio.
-- **Teste** = ramo `dev` → Cloudflare Pages (projeto `boletim-dev`, https://boletim-dev.pages.dev), build com
+- **Teste** = ramo `dev` → Cloudflare Pages (projeto criado em 11/11/2026; o nome `boletim-dev` não pegou e o endereço ficou https://boletim-42s.pages.dev), build com
   `APP_ENV=test`: faixa "AMBIENTE DE TESTE" (`EnvBanner`), ícone/manifest "Boletim TESTE". Domínio próprio de
   propósito: no mesmo `github.io` o navegador misturaria os dados guardados (IndexedDB/localStorage) dos dois.
 - Os dois usam o MESMO Supabase (produção) — testar com contas de teste. Mudança de banco: criar Supabase de teste
@@ -299,7 +299,7 @@ a demonstração "Noite Adentro", `src/lib/demo.js`). Reescrever esses passos an
 - Fluxo: trabalho novo (ex.: redesign do Claude Design) no `dev` → Antonio testa no endereço de teste → merge
   `dev` → `main`. Correção urgente: direto no `main` e depois `git merge main` no `dev`.
 - Cloudflare Pages: produção do projeto = ramo `dev`; build `npm run build`; saída `dist`; variáveis `APP_ENV=test`,
-  `NODE_VERSION=22`. Supabase Auth → Redirect URLs precisa ter `https://boletim-dev.pages.dev/**` (confirmação de
+  `NODE_VERSION=22`. Supabase Auth → Redirect URLs precisa ter `https://boletim-42s.pages.dev/**` (confirmação de
   e-mail e nova senha voltam para o ambiente onde foram pedidas: `emailRedirectTo`/`redirectTo` = origem atual).
 
 ## Redesign do Claude Design (ramo dev, 10/11/2026)
@@ -360,8 +360,12 @@ Decisões do Antonio (11/11/2026), a partir dos relatórios da continuísta do D
   Desce do Salto (756 clipes .braw): 739 importados, 15 diárias, 88 cenas + AVULSOS, 29 cartões.
 - Fases (todas feitas em 11/11/2026, testadas com o Desce do Salto importado em navegador automático, sem Supabase):
   1) base + mescla por campo; 2) importar do Resolve;
-  3) **função no aparelho** (`boletim.funcao.<projeto>` no localStorage; botões Câmera | Continuidade na tela do take —
-     escolha de quem usa o aparelho, não é permissão; "Só visualizar" continua sendo o papel viewer da Equipe).
+  3) **função de cada pessoa** (`lib/funcao.js`): o dono escolhe na aba Equipe (Tudo | Câmera | Continuidade), gravado em
+     `project.kit.funcoes = { userId: 'camera' | 'continuidade' }` (sem mudança de banco; não é trava do banco, só da tela).
+     `visao(project, uid)` → Câmera vê dados de câmera e marcações de claquete (rolo/clipe/som para todos); Continuidade vê
+     status, estrelas, observação (`notes`, só dela), personagens, tempo, claquete errada, problema técnico e, dos dados
+     de câmera, só a linha rolo · clipe. **Sem ninguém na Continuidade, a Câmera vê tudo.** Sem função = tudo. Vale na
+     tela do take, na tabela do computador (colunas) e nos relatórios (os da continuidade só para quem a vê).
      Continuidade (`components/ContinuityBlock.jsx`) troca a grade de dados de câmera por: personagens (lista da ficha
      técnica `kit.personagens`, grudados do take anterior via `STICKY_FIELDS`), tempo (REC/CORTA → `duration`),
      claquete errada (`slate_as`), problema técnico (`extra.problemas`). Nota/foto/status/estrelas iguais para os dois.
