@@ -6,7 +6,7 @@
 import { reportData, pdfSafe, staleBuild, fileName } from './export'
 import { loadDays, dayLabel } from './days'
 import { fmtDate, fmtTime, natCompare } from './util'
-import { ratingOf, resultOf, RESULT_LABEL, clipTypeLabel } from './fields'
+import { ratingOf, resultOf, RESULT_LABEL, clipTypeLabel, soundOnly, somResumo } from './fields'
 import { ficha } from './ficha'
 
 const RES_RGB = { valeu: [34, 197, 94], reserva: [250, 204, 21], ng: [239, 68, 68], check: [167, 139, 250] }
@@ -108,6 +108,8 @@ export async function buildFinalReportPdf(projectId) {
   const y = header(doc, project, 'RELATÓRIO FINAL', `${new Set(takes.map((t) => t.scene_id)).size} cenas`)
   const dayOf = Object.fromEntries(days.map((d) => [d.date, d]))
   const byShot = new Map()
+  const somDo = {} // cobertura de som por plano
+  for (const t of takes) if (t.clip_type === 'som') (somDo[t.shot_id] ||= []).push(t)
   for (const t of takes) {
     if (t.clip_type) continue
     const k = t.shot_id
@@ -121,7 +123,7 @@ export async function buildFinalReportPdf(projectId) {
     const pick = valeu.length ? valeu : reserva.slice(0, 1)
     const where = [...new Set(pick.map((t) => `${dayOf[t.shoot_date] ? dayLabel(dayOf[t.shoot_date].number) : fmtDate(t.shoot_date)} · ${fmtDate(t.shoot_date)} - ${t.roll || '?'}`))].join('\n')
     const sound = [...new Set(pick.map((t) => (t.sound === 'mos' ? 'MOS' : 'Corresponde a claquete')))].join(' / ')
-    const obs = [shot.edit_note, ...pick.map((t) => t.notes && `T${t.take_number}: ${t.notes}`), ...pick.map((t) => t.slate_as && `T${t.take_number}: claquete marcada ${t.slate_as}`)].filter(Boolean).join('\n')
+    const obs = [shot.edit_note, ...(somDo[shot.id] || []).map((t) => `Cobertura de som: ${[somResumo(t), t.notes].filter(Boolean).join(' · ') || 'sim'}`), ...pick.map((t) => t.notes && `T${t.take_number}: ${t.notes}`), ...pick.map((t) => t.slate_as && `T${t.take_number}: claquete marcada ${t.slate_as}`)].filter(Boolean).join('\n')
     return [scene.number, shot.code, valeu.map((t) => `T${t.take_number}`).join(', ') || '—',
       reserva.map((t) => `T${t.take_number} (${ratingOf(t)}/5)`).join(', '), where, sound, shot.description || '', obs]
   })
@@ -157,11 +159,11 @@ export async function buildContinuityDailyPdf(projectId, date = null) {
     doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5)
     if (s.location) doc.text(pdfSafe(`Locação: ${s.location}`), 10, y + 8.5)
     const body = b.list.map((t) => [
-      `${t._row.shotRow.code}/${String(t.take_number).padStart(2, '0')}`,
+      t.clip_type ? `${t._row.shotRow.code} · ${t.clip_type === 'som' ? 'SOM' : '—'}` : `${t._row.shotRow.code}/${String(t.take_number).padStart(2, '0')}`,
       t.clip || '', t.sound === 'mos' ? 'MOS' : 'SYNC', resText(t), shortDur(t.duration),
-      (t.characters || []).join(', '),
+      t.clip_type === 'som' ? '' : (t.characters || []).join(', '),
       [...(t.extra?.problemas || []), t.slate_as && `Claquete: ${t.slate_as}`].filter(Boolean).join(', '),
-      [t.notes, t._row.shotRow.description && t.take_number === Math.min(...b.list.filter((x) => x.shot_id === t.shot_id).map((x) => x.take_number)) ? `(${t._row.shotRow.description})` : null].filter(Boolean).join(' '),
+      [t.clip_type === 'som' ? somResumo(t) : null, t.notes, !t.clip_type && t._row.shotRow.description && t.take_number === Math.min(...b.list.filter((x) => x.shot_id === t.shot_id).map((x) => x.take_number)) ? `(${t._row.shotRow.description})` : null].filter(Boolean).join(' '),
     ])
     autoTable(doc, { ...tableStyle, startY: y + (s.location ? 10.5 : 6.5),
       head: [['Plano/take', 'Clipe', 'Som', 'Resultado', 'Tempo', 'Personagens', 'Problema', 'Observação']],
@@ -196,6 +198,7 @@ export async function buildResolveCsv(projectId, date = null) {
   const lines = []
   const missing = []
   for (const t of takes) {
+    if (soundOnly(t)) continue // cobertura de som sem câmera: não há clipe de vídeo para casar
     const s = t._row.sceneRow, sh = t._row.shotRow
     const res = t.clip_type ? null : resultOf(t)
     const clipCode = String(t.clip || '').toUpperCase()

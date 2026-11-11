@@ -106,8 +106,8 @@ function Labeled({ label, hint, children }) {
 
 const inputCls = 'w-full min-h-14 rounded-[10px] border-2 border-borda bg-surface px-3 py-2 text-[17px] text-ink outline-none focus:border-ink placeholder:text-faint'
 
-export function TextInput({ label, hint, ...p }) {
-  const el = <input className={inputCls} {...p} />
+export function TextInput({ label, hint, className, ...p }) {
+  const el = <input className={cx(inputCls, className)} {...p} />
   return label ? <Labeled label={label} hint={hint}>{el}</Labeled> : el
 }
 

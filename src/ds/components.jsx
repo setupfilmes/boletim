@@ -499,13 +499,14 @@ export function PlanoRow({ numero, tipo, descricao, takes = 0, circulados = 0, u
   );
 }
 
-export function TakeRow({ take, status, circulado, estrelas, cam, clipe, lente, tstop, som = 'SYNC', marcas = [], hora, nota, fotos = 0, onPress }) {
+// tipo: registro que não é take (falso REC, ensaio, cobertura de som…) — mostra o tipo no lugar do status
+export function TakeRow({ take, status, circulado, estrelas, cam, clipe, lente, tstop, som = 'SYNC', marcas = [], hora, nota, fotos = 0, tipo, onPress }) {
   return (
     <button type="button" className={cx('bc-takerow', 'bc-takerow--' + (status ? STATUS[status].key : 'vazio'))} onClick={onPress}>
       <TakeNumber numero={take} circulado={circulado} size="m" label={false} />
       <span className="bc-takerow__meio">
         <span className="bc-takerow__l1">
-          <StatusBadge status={status} />
+          {tipo ? <Tag>{tipo}</Tag> : <StatusBadge status={status} />}
           {estrelas > 0 && <span className="bc-takerow__estrelas" aria-label={estrelas + ' estrelas'}>{'★'.repeat(estrelas)}</span>}
           {cam && <CameraBadge cam={cam} size="p" />}
           {som === 'MOS' && <Tag icon="mic-off">MOS</Tag>}

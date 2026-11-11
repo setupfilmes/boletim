@@ -128,7 +128,7 @@ alter table public.takes drop constraint if exists takes_rating_check;
 alter table public.takes add constraint takes_rating_check check (rating is null or rating between 1 and 5);
 alter table public.takes drop constraint if exists takes_clip_type_check;
 alter table public.takes add constraint takes_clip_type_check
-  check (clip_type is null or clip_type in ('falso_rec', 'ensaio', 'wild', 'insert'));
+  check (clip_type is null or clip_type in ('falso_rec', 'ensaio', 'wild', 'insert', 'som'));
 alter table public.shots add column if not exists edit_note text;
 -- Dono não pode ter a conta apagada enquanto tiver projetos (antes: apagava os projetos em cascata, para todos)
 alter table public.projects drop constraint if exists projects_owner_id_fkey;

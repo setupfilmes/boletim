@@ -58,11 +58,12 @@ export function groupTakes(takes, project) {
 // Grupo do take N (ignora falso REC / ensaio com o mesmo número)
 export const findTake = (groups, n) => groups.find((g) => g.number === n && !g.clipType)
 
-// Quantos takes distintos (claquete) e quantos têm alguma câmera GOOD
+// Quantos takes distintos (claquete) e quantos têm alguma câmera GOOD (falso REC, ensaio, cobertura de som… não contam)
 export function countTakes(rows, shotsById) {
   const all = new Set()
   const good = new Set()
   for (const t of rows || []) {
+    if (t.clip_type) continue
     const k = takeKey(t, shotsById)
     all.add(k)
     if (t.status === 'good') good.add(k)

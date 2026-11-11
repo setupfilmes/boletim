@@ -195,6 +195,20 @@ export async function createNextTake(shot, project, linked = [shot], at = null) 
   return out
 }
 
+// Cobertura de som (room tone, falas soltas, ambiente gravados depois da cena): um registro só de som, sem câmera nem
+// clipe, no plano em que a pessoa está. Recebe o número do próximo take — clipe com clip_type fica "antes do take de
+// mesmo número", então aparece depois do último take gravado — e não gasta número de take.
+export async function createSoundCoverage(shot, number, when, data) {
+  when ||= { date: todayISO(), at: nowISO() } // diária de hoje
+  const row = await create('takes', {
+    project_id: shot.project_id, scene_id: shot.scene_id, shot_id: shot.id, take_number: number,
+    shoot_date: when.date, recorded_at: when.at, clip_type: 'som', camera: null, roll: null, clip: null,
+    sound: 'sync', status: null, rating: null, marks: null, filters: [], created_by: currentUserId(), ...data,
+  })
+  await ensureDays(shot.project_id)
+  return row
+}
+
 // Inclui uma câmera num take que já existe (ela também rodou)
 export async function addCameraToTake(shot, group, camera) {
   const inProject = await projectTakes(shot.project_id)

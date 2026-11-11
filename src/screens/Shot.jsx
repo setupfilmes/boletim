@@ -8,12 +8,12 @@ import {
 } from '../ds/components'
 import PickerSheet from '../components/PickerSheet'
 import TakePhotos from '../components/TakePhotos'
-import ContinuityBlock from '../components/ContinuityBlock'
+import ContinuityBlock, { personagensDo } from '../components/ContinuityBlock'
 import { visao } from '../lib/funcao'
 import { useTakePhotos } from '../lib/photos'
 import { useProject, useScene, useShot, useTakesByShots, useTakesByProject, useKit, useRole, kitOptions, useShots } from '../lib/hooks'
-import { createNextTake, previewNextTake, addCameraToTake, deleteTakes, update, updateExtra, planClipShift } from '../lib/repo'
-import { projectFields, extraField, extraText, isEmpty, MARKS, formatTc, ratingOf, CLIP_TYPES, clipTypeLabel } from '../lib/fields'
+import { createNextTake, previewNextTake, addCameraToTake, deleteTakes, update, updateExtra, planClipShift, createSoundCoverage } from '../lib/repo'
+import { projectFields, extraField, extraText, isEmpty, MARKS, formatTc, ratingOf, CLIP_TYPES, clipTypeLabel, SOM_TIPOS, somResumo } from '../lib/fields'
 import { groupTakes, findTake, isMulticam, projectCameras, linkedShots, shotCameras, shotLabel as labelOf } from '../lib/cameras'
 import { useAuth } from '../auth'
 import { fmtDate, fmtTime, joinFilters, vibrate, incrCode, todayISO, nowISO } from '../lib/util'
@@ -93,6 +93,7 @@ export default function Shot() {
   const [text, setText] = useState(null) // { row, field }
   const [photoRowId, setPhotoRowId] = useState(null)
   const [editGroup, setEditGroup] = useState(null)
+  const [som, setSom] = useState(null) // { row } — cobertura de som (row = null: nova)
   const [editShot, setEditShot] = useState(false)
   const [showAll, setShowAll] = useState(false)
 
@@ -194,6 +195,15 @@ export default function Shot() {
     window.scrollTo({ top: 0 })
   }
 
+  // gaveta da cobertura de som (registro e lista)
+  const soundSheet = som && (<SoundSheet row={som.row} project={project} canEdit={canEdit} onClose={() => setSom(null)}
+        title={`Cobertura de som · Cena ${scene.number}`}
+        onCreate={async (data) => {
+          const n = (realGroup && mode === 'registro' && !isDraft ? number + 1 : null) || nextNumber
+          await createSoundCoverage(shot, n, whenForDay(day, todayISO()), data)
+          notify(`Cobertura de som registrada${data.extra.som.length ? ` (${data.extra.som.join(' + ')})` : ''} · não gasta número de take`)
+        }} />)
+
   // ---------- modo lista ----------
   if (mode === 'lista') {
     const visible = day && !showAll ? (allTakes || []).filter((t) => t.shoot_date === day.date) : allTakes || []
@@ -213,12 +223,12 @@ export default function Shot() {
           {g2.length === 0 && <EmptyState icon="clapperboard" title="Nenhum take ainda">{canEdit ? `Toque em Gravar ${nextNumber} para registrar o primeiro.` : 'Ainda não há takes neste plano.'}</EmptyState>}
           <div className="border-t-2 border-line" data-testid="takes">
             {g2.map((g) => g.rows.map((r) => (
-              <TakeRow key={r.id} take={g.number} status={UP[r.status] || null} estrelas={ratingOf(r)} cam={g.rows.length > 1 || multi ? r.camera || undefined : undefined}
+              <TakeRow key={r.id} take={g.clipType === 'som' ? <Icon name="mic" size={22} /> : g.number} tipo={g.clipType ? clipTypeLabel(g.clipType).toUpperCase() : undefined} status={UP[r.status] || null} estrelas={ratingOf(r)} cam={g.rows.length > 1 || multi ? r.camera || undefined : undefined}
                 clipe={r.clip} lente={r.lens} tstop={r.t_stop} som={r.sound === 'mos' ? 'MOS' : 'SYNC'} marcas={(r.marks || []).map(markCodeOf)}
                 hora={`${fmtTime(r.recorded_at)}${r.extra?.corrigido_em ? ' ✎' : ''}`}
-                nota={g.clipType ? [clipTypeLabel(g.clipType).toUpperCase(), r.notes].filter(Boolean).join(' · ') : r.notes || undefined}
+                nota={(g.clipType === 'som' ? [somResumo(r), r.notes].filter(Boolean).join(' · ') : r.notes) || undefined}
                 fotos={photos.filter((p) => p.take_id === r.id).length}
-                onPress={() => (g.clipType ? canEdit && setEditGroup(g)
+                onPress={() => (g.clipType === 'som' ? setSom({ row: r }) : g.clipType ? canEdit && setEditGroup(g)
                   : setParams({ ...(day ? { dia: day.id } : {}), take: String(g.number), ...(r.camera ? { cam: r.camera } : {}) }))} />
             )))}
           </div>
@@ -230,6 +240,7 @@ export default function Shot() {
             </div>
           </div>
         )}
+        {soundSheet}
       </>
     )
   }
@@ -355,6 +366,9 @@ export default function Shot() {
             <div className="grid grid-cols-2 gap-2" data-testid="clip-types">
               <Button size="p" variant="fantasma" onClick={() => marcarClipe('falso_rec')} data-testid="falso-rec">Foi falso REC</Button>
               <Button size="p" variant="fantasma" onClick={() => marcarClipe('ensaio')}>Foi ensaio</Button>
+              <Button size="p" variant="fantasma" icon="mic" className="col-span-2" onClick={() => setSom({ row: null })} data-testid="sound-coverage">
+                Cobertura de som (room tone, falas…)
+              </Button>
             </div>
           )}
           {!isDraft && canEdit && (
@@ -438,7 +452,61 @@ export default function Shot() {
       {editGroup && <TakeEditSheet group={editGroup} onClose={() => setEditGroup(null)} groups={groups}
         onDeleted={() => { setCurNum(null); setDraftKey((k) => k + 1); if (mode === 'take') nav(-1) }} />}
       <ShotForm open={editShot} onClose={() => setEditShot(false)} shot={shot} scene={scene} shots={shots || []} project={project} />
+      {soundSheet}
     </>
+  )
+}
+
+// Cobertura de som: o técnico grava depois da cena (room tone, falas soltas, ambiente). Registro só de som, sem câmera.
+function SoundSheet({ row, project, canEdit, onClose, onCreate, title }) {
+  const { confirm, notify } = useDialog()
+  const chars = personagensDo(project)
+  const [tipos, setTipos] = useState(row?.extra?.som || [])
+  const [sel, setSel] = useState(row?.characters || [])
+  const [arquivo, setArquivo] = useState(row?.extra?.som_arquivo || '')
+  const [obs, setObs] = useState(row?.notes || '')
+  const toggle = (list, set, v) => canEdit && (vibrate(), set(list.includes(v) ? list.filter((x) => x !== v) : [...list, v]))
+  const chip = (on) => `min-h-12 rounded-[10px] border-2 px-3 text-[17px] font-bold ${on ? 'border-ink bg-ink text-bg' : 'border-borda bg-surface text-ink'}`
+  const save = async () => {
+    const extra = { ...(row?.extra || {}), som: tipos, som_arquivo: arquivo.trim() || null }
+    const data = { characters: sel.length ? sel : null, notes: obs.trim() || null, extra }
+    if (row) { await update('takes', row.id, data); notify('Cobertura de som salva') } else await onCreate(data)
+    onClose()
+  }
+  return (
+    <Sheet open onClose={onClose} title={title}
+      footer={canEdit && <Btn full size="lg" onClick={save} data-testid="sound-save">{row ? 'Salvar' : 'Registrar cobertura de som'}</Btn>}>
+      <div className="grid gap-4" data-testid="sound-sheet">
+        <p className="text-[15px] text-muted">Som gravado depois da cena, sem câmera. Fica neste plano, não gasta número de take e
+          sai nos relatórios da continuidade (fica fora do boletim de câmera e do CSV do Resolve).</p>
+        <div role="group" aria-label="O que foi gravado">
+          <div className="mb-1.5 text-[13px] font-bold uppercase tracking-[.07em] text-muted">O que foi gravado</div>
+          <div className="flex flex-wrap gap-2">
+            {SOM_TIPOS.map((t) => <button key={t} type="button" aria-pressed={tipos.includes(t)} disabled={!canEdit} onClick={() => toggle(tipos, setTipos, t)} className={chip(tipos.includes(t))}>{t}</button>)}
+          </div>
+        </div>
+        {chars.length > 0 && (
+          <div role="group" aria-label="Falas de quem">
+            <div className="mb-1.5 text-[13px] font-bold uppercase tracking-[.07em] text-muted">Falas de quem</div>
+            <div className="flex flex-wrap gap-2">
+              {chars.map((c) => <button key={c} type="button" aria-pressed={sel.includes(c)} disabled={!canEdit} onClick={() => toggle(sel, setSel, c)} className={chip(sel.includes(c))}>{c}</button>)}
+            </div>
+          </div>
+        )}
+        <TextInput label="Arquivo ou take do gravador de som (opcional)" value={arquivo} disabled={!canEdit} onChange={(e) => setArquivo(e.target.value)}
+          placeholder="ex.: 31-WT01 ou T045" className="font-mono" />
+        <TextArea label="Observação" rows={3} value={obs} disabled={!canEdit} onChange={(e) => setObs(e.target.value)}
+          placeholder="ex.: room tone de 30 s com a geladeira desligada" />
+        {row && canEdit && (
+          <Btn variant="danger" onClick={async () => {
+            if (await confirm({ title: 'Excluir cobertura de som', danger: true, confirmLabel: 'Excluir',
+              message: 'Excluir este registro de cobertura de som? Não dá para desfazer.' })) {
+              await deleteTakes([row.id]); notify('Cobertura de som excluída'); onClose()
+            }
+          }}><IconTrash /> Excluir</Btn>
+        )}
+      </div>
+    </Sheet>
   )
 }
 
@@ -552,7 +620,7 @@ function TakeEditSheet({ group, onClose, groups, onDeleted }) {
                 className={`min-h-12 rounded-[10px] border-2 px-3 font-bold ${kind === c.key ? 'border-ink bg-ink text-bg' : 'border-borda bg-surface'}`}>{c.label}</button>
             ))}
           </div>
-          <p className="mt-1 text-[15px] text-muted">Falso REC, ensaio, wild e insert gastam número de clipe, não de take.</p>
+          <p className="mt-1 text-[15px] text-muted">Falso REC, ensaio, wild e insert gastam número de clipe, não de take. Cobertura de som não gasta nenhum dos dois.</p>
         </div>
         {many && group.rows.map((r) => (
           <Btn key={r.id} variant="ghost" onClick={async () => {

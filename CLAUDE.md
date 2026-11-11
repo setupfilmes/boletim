@@ -346,7 +346,7 @@ Decisões do Antonio (11/11/2026), a partir dos relatórios da continuísta do D
   Personagens: o campo "People" do Resolve 21 é preenchido pela análise de rostos (IntelliSearch), não dá para
   digitar → personagens irão num campo próprio + Keywords (testar coluna "People" na 1ª exportação).
 - Colunas novas (`supabase/atualizacao-2026-11-11-continuidade.sql`, também no `schema.sql`): `takes.rating`,
-  `clip_type` (falso_rec | ensaio | wild | insert), `duration`, `comments` (Comments do Resolve: notas de correção),
+  `clip_type` (falso_rec | ensaio | wild | insert | som), `duration`, `comments` (Comments do Resolve: notas de correção),
   `slate_as` (claquete marcada errada), `characters` (jsonb), `file_name` (nome real do arquivo); `shots.edit_note`.
   Só entram no envio quando existem na linha (`pick`). **Rodar o SQL antes de usar em produção.**
 - `takeKey`: clipe com `clip_type` nunca se junta a um take.
@@ -383,4 +383,12 @@ Decisões do Antonio (11/11/2026), a partir dos relatórios da continuísta do D
   6) **Conferir cartão (DIT)** (`screens/CardCheck.jsx`, `/p/:id/cartao`, menu ⋮): escolher a pasta do cartão (só os nomes
      são lidos) ou o CSV do Resolve → conferem / clipes sem take / takes sem clipe / clipe repetido; casa pelo `file_name`
      e, se o take ainda não tem, pelo clipe (A001C003); botão grava o nome real do arquivo nos takes.
+- **Cobertura de som** (pedido do Antonio, 11/11/2026): o som grava depois da cena (room tone, falas soltas, ambiente) e
+  fica um "take solto". Botão "Cobertura de som" no registro do take → gaveta (`SoundSheet` em `Shot.jsx`): o que foi
+  gravado (`extra.som`, lista `SOM_TIPOS`), falas de quem (`characters`), arquivo/take do gravador (`extra.som_arquivo`),
+  observação (`notes`). Grava com `createSoundCoverage` (`repo.js`): `clip_type = 'som'`, sem câmera/rolo/clipe, número =
+  próximo take (aparece depois do último take e não gasta número). Na lista: ícone de microfone + resumo (`somResumo`);
+  tocar reabre a gaveta (editar/excluir). Registro só de som (`soundOnly`) fica **fora** do boletim de câmera, DIT, ALE
+  e CSV do Resolve (`reportData(..., { incluirSom: false })`); entra na planilha (Resultado "COBERTURA DE SOM"), no
+  boletim diário da continuidade e na observação do relatório final. `countTakes` não conta mais falso REC/ensaio/som.
 - Falta: validar o CSV de volta no Resolve (Import Metadata) e o teste com o Supabase real (rodar o SQL antes).

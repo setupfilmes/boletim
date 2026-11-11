@@ -83,7 +83,7 @@ export function parseCsv(text) {
 const VIDEO = /\.(braw|r3d|ari|arx|mxf|mov|mp4|crm|dng)$/i
 const COLOR_RESULT = { green: 'valeu', yellow: 'reserva', orange: 'ng', red: 'ng', purple: 'check' }
 const KEYWORD_RESULT = { 'VALEU': 'valeu', 'RESERVA': 'reserva', 'NÃO VALEU': 'ng', 'NAO VALEU': 'ng', 'CHECAR': 'check', 'CHECK': 'check' }
-const KEYWORD_TYPE = { 'FALSO REC': 'falso_rec', 'ENSAIO': 'ensaio', 'WILD': 'wild', 'INSERT': 'insert' }
+const KEYWORD_TYPE = { 'FALSO REC': 'falso_rec', 'ENSAIO': 'ensaio', 'WILD': 'wild', 'INSERT': 'insert', 'SOM': 'som', 'COBERTURA DE SOM': 'som' }
 export const RESERVA_STARS = 3 // reservas sem estrelas no Resolve entram com 3 (ajustável depois)
 
 const unpad = (s) => String(s || '').trim().replace(/^0+(?=\d)/, '')

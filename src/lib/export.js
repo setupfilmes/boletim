@@ -2,7 +2,7 @@
 import { getDb } from './db'
 import { natCompare, fmtDate, fmtTime, joinFilters, plural } from './util'
 import { cameraOrder, projectCameras, takeKey, shotLabel } from './cameras'
-import { EXTRA_FIELDS, extraField, extraText, isEmpty, markCode, markFull, SOUND, ratingOf, resultOf, RESULT_LABEL } from './fields'
+import { EXTRA_FIELDS, extraField, extraText, isEmpty, markCode, markFull, SOUND, ratingOf, resultOf, RESULT_LABEL, clipTypeLabel, soundOnly, somResumo } from './fields'
 import { photoDataUrl } from './photos'
 import { loadDays, dayLabel } from './days'
 import { ficha, formatLine, camerasLine } from './ficha'
@@ -12,7 +12,8 @@ const STATUS_TXT = { good: 'GOOD', ng: 'NG', check: 'CHECK' }
 const statusTxt = (r) => [STATUS_TXT[r.status], r.rating && `${r.rating}/5`].filter(Boolean).join(' ')
 const STATUS_RGB = { good: [34, 197, 94], ng: [239, 68, 68], check: [250, 204, 21] }
 
-export async function reportData(projectId, date = null) {
+// incluirSom: false = sem os registros só de som (cobertura de som sem clipe), para o boletim de câmera, DIT e ALE
+export async function reportData(projectId, date = null, { incluirSom = true } = {}) {
   const db = getDb()
   const project = await db.projects.get(projectId)
   const scenes = Object.fromEntries((await db.scenes.where('project_id').equals(projectId).toArray()).map((s) => [s.id, s]))
@@ -20,6 +21,7 @@ export async function reportData(projectId, date = null) {
   let takes = (await db.takes.where('project_id').equals(projectId).toArray())
     .filter((t) => !t.deleted && scenes[t.scene_id] && !scenes[t.scene_id].deleted && shots[t.shot_id] && !shots[t.shot_id].deleted)
   if (date) takes = takes.filter((t) => t.shoot_date === date)
+  if (!incluirSom) takes = takes.filter((t) => !soundOnly(t))
   const camCmp = cameraOrder(project)
   const key = (t) => takeKey(t, shots) // planos vinculados (link_id) = mesma claquete
   const label = (shotId) => shotLabel(scenes[shots[shotId].scene_id], shots[shotId])
@@ -95,7 +97,7 @@ export async function reportData(projectId, date = null) {
     status: t.status || '',
     time: fmtTime(t.recorded_at),
     corrected: t.extra?.corrigido_em || null, // take mudado depois de gravado (tela do take)
-    notes: t.notes || '',
+    notes: [t.clip_type === 'som' ? somResumo(t) : null, t.notes].filter(Boolean).join(' · '),
     comments: t.comments || '',
     clipType: t.clip_type || '',
     fileName: t.file_name || '',
@@ -168,7 +170,7 @@ export async function buildPdf(projectId, date = null) {
   // jsPDF só é carregado aqui (deixa a abertura do app mais leve). O arquivo separado
   // entra no precache do service worker, então funciona offline do mesmo jeito.
   const [{ jsPDF }, { autoTable }] = await Promise.all([import('jspdf'), import('jspdf-autotable')]).catch(staleBuild)
-  const { project, rows, summary, fields, dayName } = await reportData(projectId, date)
+  const { project, rows, summary, fields, dayName } = await reportData(projectId, date, { incluirSom: false })
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
   const W = doc.internal.pageSize.getWidth()
   const M = 10
@@ -377,7 +379,7 @@ export async function buildCsv(projectId, date = null) {
     ['marks', 'Marcações'], ['status', 'Status'], ['time', 'Hora'], ['correctedAt', 'Corrigido em'], ...fields.map((f) => [`x:${f.key}`, f.label]), ['notes', 'Notas pós/VFX'], ['comments', 'Correção / pós'], ['fileName', 'Arquivo'],
     ['photoCount', 'Fotos'], ['photoCaptions', 'Legendas das fotos']]
   const esc = csvEscape(';')
-  const val = (r, k) => (k === 'status' ? STATUS_TXT[r.status] || '' : k === 'result' ? RESULT_LABEL[r.result] || ''
+  const val = (r, k) => (k === 'status' ? STATUS_TXT[r.status] || '' : k === 'result' ? (r.clipType ? clipTypeLabel(r.clipType).toUpperCase() : RESULT_LABEL[r.result] || '')
     : k === 'rating' ? r.rating || ''
     : k === 'photoCount' ? r.photos.length || ''
     : k === 'correctedAt' ? (r.corrected ? `${fmtDate(r.corrected.slice(0, 10))} ${fmtTime(r.corrected)}` : '')
@@ -413,7 +415,7 @@ const DIT_COLS = [
 ]
 
 export async function buildDitCsv(projectId, date = null) {
-  const { project, rows: raw } = await reportData(projectId, date)
+  const { project, rows: raw } = await reportData(projectId, date, { incluirSom: false })
   // ficha técnica completa o que o take não tem (LUT, codec, resolução do projeto; nº de série da câmera)
   const fc = ficha(project)
   const serial = Object.fromEntries((project.kit?.cameras || []).map((c) => [c.id, c.serial || '']))
@@ -428,7 +430,7 @@ export async function buildDitCsv(projectId, date = null) {
 // ALE (Avid Log Exchange): formato aberto, texto separado por TAB — importa no Avid, DaVinci Resolve e Silverstack.
 // Name = nome do clipe; Start/End = TC (se preenchido); Tracks V (MOS) ou VA1A2 (com som).
 export async function buildAle(projectId, date = null) {
-  const { project, rows } = await reportData(projectId, date)
+  const { project, rows } = await reportData(projectId, date, { incluirSom: false })
   const fpsCount = {}
   for (const r of rows) if (r.fps) fpsCount[r.fps] = (fpsCount[r.fps] || 0) + 1
   const fps = Object.entries(fpsCount).sort((a, b) => b[1] - a[1])[0]?.[0] || '24'

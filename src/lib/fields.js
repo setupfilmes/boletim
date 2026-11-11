@@ -83,7 +83,22 @@ export const stars = (n) => (n ? '★'.repeat(n) + '☆'.repeat(5 - n) : '')
 export const CLIP_TYPES = [
   { key: 'falso_rec', label: 'Falso REC', code: 'FALSO REC' },
   { key: 'ensaio', label: 'Ensaio', code: 'ENSAIO' },
-  { key: 'wild', label: 'Wild (som/imagem solta)', code: 'WILD' },
+  { key: 'wild', label: 'Wild (imagem solta)', code: 'WILD' },
   { key: 'insert', label: 'Insert', code: 'INSERT' },
+  { key: 'som', label: 'Cobertura de som', code: 'SOM' },
 ]
 export const clipTypeLabel = (k) => CLIP_TYPES.find((c) => c.key === k)?.label || k
+
+// Cobertura de som: o técnico de som grava depois da cena (room tone, falas soltas, ambiente) — registro só de som,
+// sem clipe de câmera (clip_type 'som'). O que foi gravado em extra.som (lista), arquivo/take do gravador em
+// extra.som_arquivo, personagens das falas em characters, observação em notes.
+export const SOM_TIPOS = ['Room tone', 'Falas (wild lines)', 'Ambiente', 'Efeitos / foley']
+// só som = não tem clipe de câmera (fica fora do boletim de câmera, DIT, ALE e CSV do Resolve)
+export const soundOnly = (t) => t?.clip_type === 'som' && !t.clip
+// "Room tone + Falas (wild lines): Ana · arquivo 31-WT01"
+export function somResumo(t) {
+  const tipos = Array.isArray(t?.extra?.som) ? t.extra.som : []
+  const chars = Array.isArray(t?.characters) ? t.characters : []
+  return [tipos.join(' + ') + (chars.length ? `${tipos.length ? ': ' : ''}${chars.join(', ')}` : ''),
+    t?.extra?.som_arquivo && `arquivo ${t.extra.som_arquivo}`].filter(Boolean).join(' · ')
+}

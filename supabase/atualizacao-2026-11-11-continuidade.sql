@@ -7,7 +7,7 @@
 -- Take
 --   rating      estrelas da continuidade (1–5). GOOD com 5 = VALEU; GOOD com 2–4 = RESERVA.
 --               Vai para o Rating do Resolve; GOOD = Good Take, NG = Rejected.
---   clip_type   clipe que não é take: falso_rec, ensaio, wild, insert (null = take normal)
+--   clip_type   clipe que não é take: falso_rec, ensaio, wild, insert, som (cobertura de som) (null = take normal)
 --   duration    duração do take ("00:00:36:18" ou "0:36")
 --   comments    notas de correção / pós (Comments do Resolve)
 --   slate_as    o que estava escrito na claquete quando foi marcada errada (ex.: "54/1/1")
@@ -25,7 +25,7 @@ alter table public.takes drop constraint if exists takes_rating_check;
 alter table public.takes add constraint takes_rating_check check (rating is null or rating between 1 and 5);
 alter table public.takes drop constraint if exists takes_clip_type_check;
 alter table public.takes add constraint takes_clip_type_check
-  check (clip_type is null or clip_type in ('falso_rec', 'ensaio', 'wild', 'insert'));
+  check (clip_type is null or clip_type in ('falso_rec', 'ensaio', 'wild', 'insert', 'som'));
 
 -- Plano: observação para a montagem (vai para o relatório final da continuidade)
 alter table public.shots add column if not exists edit_note text;
