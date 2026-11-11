@@ -83,6 +83,12 @@ export default function Account() {
         </Card>
 
         <Card className="p-4">
+          <div className="mb-3 text-[13px] font-bold uppercase tracking-[.07em] text-muted">Câmera Bluetooth (teste)</div>
+          <Btn variant="surface" full onClick={() => nav('/camera')}>Conectar câmera Blackmagic</Btn>
+          <p className="mt-2 text-xs text-muted">Lê timecode, REC e claquete da câmera. Chrome no Android ou no computador.</p>
+        </Card>
+
+        <Card className="p-4">
           <div className="mb-3 text-[13px] font-bold uppercase tracking-[.07em] text-muted">Backup</div>
           <Btn variant="surface" full onClick={async () => { await shareFile(await buildBackup()) }}>Exportar backup (JSON)</Btn>
           <p className="mt-2 text-xs text-muted">Cópia de todos os seus projetos em um arquivo — funciona offline.</p>

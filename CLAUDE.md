@@ -384,3 +384,50 @@ Decisões do Antonio (11/11/2026), a partir dos relatórios da continuísta do D
      são lidos) ou o CSV do Resolve → conferem / clipes sem take / takes sem clipe / clipe repetido; casa pelo `file_name`
      e, se o take ainda não tem, pelo clipe (A001C003); botão grava o nome real do arquivo nos takes.
 - Falta: validar o CSV de volta no Resolve (Import Metadata) e o teste com o Supabase real (rodar o SQL antes).
+
+## Câmera Blackmagic por Bluetooth (ramo `bluetooth`, 11/11/2026)
+
+Conexão direta (Web Bluetooth), sem o app da Blackmagic. Protocolo traduzido do projeto **CCU Bridge**
+(firmware ESP32; levantamento completo em `CCU_Bridge_LoRa/docs/bluetooth-blackmagic.md`, OneDrive do Antonio).
+- `src/lib/bmd/protocol.js` — puro: UUIDs, `buildCommand` (preenche até múltiplo de 4), `parseMessages` (várias
+  mensagens por indicação; ignora `FF 04 00 00 FF FF FF FF`), `applyMessage` (REC 10.1, codec 10.0, formato 1.9,
+  ISO/WB/shutter, claquete categoria 12), `parseTimecode` (BCD, 4 últimos bytes invertidos, 2 bits altos da hora =
+  marcador), `cmd.*` (projeto, cena, take, good take, rolo, REC). Testes: `node --test tests/bmd-protocol.test.mjs`
+  (bytes reais da Pocket 4K).
+- `src/lib/bmd/link.js` — conexão única fora do React (`useSyncExternalStore`), reconexão a cada 4 s, timecode por
+  assinatura própria (`subscribeTimecode`, não re-renderiza a tela), REC/CORTA viram `recordings` com TC de início/fim,
+  aviso `noData` se a câmera não mandar nada em 5 s (= não pareou). Única parte a trocar num app Capacitor.
+- `src/screens/CameraLink.jsx` — tela de teste `#/camera` (abre **sem login**; não toca nos dados) e botão em Conta.
+- **Testado em 11/11/2026, PC com Windows + Chrome + Pocket 4K:** timecode bate (pequeno atraso), REC/CORTA
+  detectados, codec/FPS/ISO/claquete lidos certos, cena/take/good take escritos aparecem na câmera (marca o último
+  take), REC e Parar pelo app funcionam.
+- **Pareamento:** o Chrome não pede o PIN sozinho — a câmera aceita a conexão e a escrita do nome, mas fica muda.
+  Na 1ª vez é preciso **parear pelo sistema** (Windows/Android → Bluetooth → adicionar → PIN da câmera); depois o
+  site conecta direto. **Windows 11:** a câmera só aparece em "Adicionar dispositivo" com Bluetooth e dispositivos →
+  Dispositivos → "Descoberta de dispositivos Bluetooth" = **Avançado**, e só quando nada está conectado nela (o site
+  pendurado numa conexão a esconde). Se a câmera "esquecer" o aparelho (Bluetooth desligado pelo menu dela, ou
+  pareada com outro), ela aceita e derruba a conexão em loop: remover o dispositivo no sistema e parear de novo
+  (a tela avisa: `refused`). Sem pareamento, a conexão "funciona" mas a câmera não manda nada (tela: "Sem pareamento").
+  Cada câmera fica pareada com **um aparelho por vez**.
+- **REC pelo app** só em "Avançado" (fechado, no fim da tela), com confirmação em REC e em Parar — decisão do Antonio.
+- **Gravações guardadas no aparelho** (`localStorage` `boletim.bt.recordings`). A câmera **não manda lista de clipes nem
+  nome de arquivo** pelo Bluetooth. O que rodou sem conexão é deduzido ao reconectar (`detectGap` em protocol.js):
+  retrato salvo (`boletim.bt.snapshot`: nº do take da claquete, tempo livre do cartão ativo, formato) × estado novo.
+  Salto no take = nº de clipes (a câmera soma 1 por clipe — **conferir na Pocket**); queda no tempo livre = segundos
+  gravados (só se cartão e formato iguais). REC que caiu no meio fecha sem TC de saída ("caiu"). Lista completa com
+  nome dos arquivos: Conferir cartão / importar do Resolve.
+- **Integração com o take — decisões do Antonio (11/11/2026):**
+  - REC com a câmera conectada **cria o take no último plano aberto** (mesmo fora da tela do take; dá para mover depois).
+  - ISO, WB, shutter, FPS, codec e resolução **lidos da câmera entram sozinhos** no take e valem mais que os "grudados".
+    Lente, foco, filtros e T-stop continuam à mão (a Pocket não informa).
+  - Multicâmera: **um celular conecta em todas as câmeras** (um AC anota tudo). Cada câmera Bluetooth fica ligada a
+    uma letra do projeto (A, B…), e o app lembra a escolha.
+  - Campo "Cena" da claquete da câmera = **cena + plano** ("12A"); o take vai no campo próprio.
+  - Fluxo: abrir o take manda cena/take para a câmera → REC cria o take (TC in, hora, dados da câmera) → CORTA preenche
+    TC out e duração → GOOD/NG marca o good take na câmera (vale para o último clipe) → Próximo manda o take seguinte.
+    Clipes que rodaram sem conexão: o app avisa e cria os takes com um toque (sem TC).
+  - Ordem: 1) uma câmera na tela do take; 2) multicâmera; 3) "Conferir cartão" casando também pelo TC de início;
+    4) app de iPhone (Capacitor).
+- **iPhone/iPad:** nenhum navegador tem Web Bluetooth. Caminho: app com Capacitor + plugin BLE (trocar só `link.js`).
+- Falta: testar no celular Android (S25+), conferir cena/take/good take no metadado do clipe no Resolve, e ligar à
+  tela do plano (REC cria o take com TC in, CORTA preenche TC out/duração, app manda cena/take para a câmera).

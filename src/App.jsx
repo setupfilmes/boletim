@@ -16,6 +16,7 @@ import Kit from './screens/Kit'
 import Account from './screens/Account'
 import ImportResolve from './screens/ImportResolve'
 import CardCheck from './screens/CardCheck'
+import CameraLink from './screens/CameraLink'
 import ShareWatcher from './components/ShareWatcher'
 import ErrorBoundary from './components/ErrorBoundary'
 import InviteAcceptor from './components/InviteAcceptor'
@@ -47,6 +48,8 @@ function SafeRoutes({ children }) {
 
 function Gate() {
   const { loading, user, recovery } = useAuth()
+  // Teste da câmera Bluetooth abre sem conta: não lê nem grava dados do Boletim
+  if (!user && window.location.hash.startsWith('#/camera')) return <HashRouter><CameraLink standalone /></HashRouter>
   if (!supabase) return <Setup />
   if (loading) return <div className="flex h-full items-center justify-center font-display text-muted">Carregando…</div>
   if (recovery) return <NewPassword />
@@ -66,6 +69,7 @@ function Gate() {
         <Route path="/kit" element={<Kit />} />
         <Route path="/conta" element={<Account />} />
         <Route path="/importar" element={<ImportResolve />} />
+        <Route path="/camera" element={<CameraLink />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       </SafeRoutes>
