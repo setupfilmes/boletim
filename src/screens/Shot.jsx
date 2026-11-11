@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router'
 import { TopBar, Btn, Empty, Sheet, TextInput, TextArea, IconBtn, useDialog } from '../components/ui'
 import { IconEdit, IconTrash, IconX } from '../components/icons'
@@ -19,6 +19,9 @@ import { useAuth } from '../auth'
 import { fmtDate, fmtTime, joinFilters, vibrate, incrCode, todayISO, nowISO } from '../lib/util'
 import { useDays, dayLabel, whenForDay } from '../lib/days'
 import { ShotForm } from './Scene'
+import CameraBtBar from '../components/CameraBtBar'
+import * as btLink from '../lib/bmd/link'
+import * as bt from '../lib/bmd/session'
 
 // Status: no banco 'good' | 'ng' | 'check'; no design system 'GOOD' | 'NG' | 'CHECK'
 const UP = { good: 'GOOD', ng: 'NG', check: 'CHECK' }
@@ -97,6 +100,42 @@ export default function Shot() {
   const [editShot, setEditShot] = useState(false)
   const [showAll, setShowAll] = useState(false)
 
+  // ---- câmera Bluetooth (lib/bmd/session.js): REC cria o take no último plano aberto ----
+  const btState = useSyncExternalStore(btLink.subscribe, btLink.getState)
+  const btSession = useSyncExternalStore(bt.subscribe, bt.getState)
+  // último REC já visto por esta tela (começa no atual: só RECs novos fazem a tela pular)
+  const btSeq = useRef(bt.getState().current?.seq ?? 0)
+  // calculado no desenho da tela, aplicado depois (efeito sem lista: roda a cada desenho)
+  const btPlan = useRef(null)
+  btPlan.current = null
+  useEffect(() => {
+    const p = btPlan.current
+    if (!p) return
+    bt.setOpenTake(p.open)
+    if (p.slate) bt.syncSlate(p.slate.scene, p.slate.take)
+  })
+  // este plano passa a ser o "último plano aberto"
+  useEffect(() => {
+    if (mode !== 'registro' || !canEdit || !shot || !scene || shot.deleted) return
+    bt.setContext({ projectId, sceneId, shotId: shot.id, dayDate: day?.date || null, label: labelOf(scene, shot) })
+  }, [mode, canEdit, shot?.id, shot?.code, scene?.number, day?.date]) // eslint-disable-line react-hooks/exhaustive-deps
+  // REC na câmera criou (ou usou) um take deste plano: a tela vai para ele
+  useEffect(() => {
+    const c = btSession.current
+    if (!c || c.seq === btSeq.current) return
+    btSeq.current = c.seq
+    if (mode !== 'registro' || !linked.some((x) => x.id === c.shotId)) return
+    // o take que estava na tela fica salvo; a tela vai para o take novo, limpo
+    if (curNum && curNum !== c.number) {
+      const g = groups.find((x) => x.number === curNum && !x.clipType)
+      const resumo = g ? g.rows.map((r) => `${multi ? `${r.camera} ` : ''}${STATUS_TXT[r.status] || 'sem status'}`).join(' · ') : 'salvo'
+      setSalvo({ number: curNum, resumo })
+    } else setSalvo(null)
+    setCurNum(c.number)
+    setCam(null)
+    window.scrollTo({ top: 0 })
+  }, [btSession.current, mode, linked]) // eslint-disable-line react-hooks/exhaustive-deps
+
   if (shot === undefined || scene === undefined || project === undefined) return null
   if (!shot || shot.deleted) return (<><TopBar title="Plano" back={`/p/${projectId}/s/${sceneId}${q}`} /><Empty title="Plano não encontrado" /></>)
 
@@ -112,6 +151,24 @@ export default function Shot() {
   const number = realGroup?.number ?? rows[0]?.take_number
   const active = rows.find((r) => r.camera === cam) || rows[0]
   const isDraft = !!active?._draft
+  // Bluetooth: o take mostrado (já criado, sem REC) recebe o próximo REC; a claquete da câmera recebe cena + nº
+  const btLetter = multi ? bt.cameraLetter(projectId) || projectCameras(project)[0]?.id : undefined
+  const btMine = (r) => btLetter === undefined || r.camera === btLetter
+  const btRecorded = !!realGroup && rows.some((r) => btMine(r) && r.extra?.bt_rec)
+  if (mode === 'registro') {
+    btPlan.current = {
+      // só um take ainda "em branco" (sem REC, sem status, sem estrelas) recebe o próximo REC
+      open: realGroup && !btRecorded && !rows.some((r) => r.status || r.rating) ? { shotId: shot.id, number, takeIds: rows.map((r) => r.id) } : null,
+      slate: canEdit && btState.status === 'connected' && number ? { scene: label, take: btRecorded ? number + 1 : number } : null,
+    }
+  }
+  const btRecHere = btState.camera.recording && btSession.current?.takeId && rows.some((r) => r.id === btSession.current.takeId)
+  // Em que ponto este take está, com a câmera conectada: gravando / último gravado (avaliar) / esperando o REC
+  const btOn = btState.status === 'connected' && !btState.noData
+  const btPhase = mode !== 'registro' ? null
+    : btRecHere ? 'rec'
+    : btRecorded && btSession.lastRecTakeId && rows.some((r) => r.id === btSession.lastRecTakeId) ? 'ultimo'
+    : btOn && !btRecorded ? 'espera' : null
 
   // cria o take do rascunho (uma vez só, mesmo com toques rápidos) e devolve as linhas reais
   const materialize = async () => {
@@ -288,6 +345,8 @@ export default function Shot() {
             </div>
           )}
 
+          {mode === 'registro' && canEdit && v.camera && <CameraBtBar project={project} />}
+
           {salvo && mode === 'registro' && (
             <div className="bc-rec__salvo" role="status" data-testid="saved">
               <Icon name="check" size={20} strokeWidth={3} />
@@ -301,12 +360,35 @@ export default function Shot() {
             </div>
           )}
 
+          {btPhase === 'rec' && (
+            <div className="rounded-[10px] bg-ng px-3 py-2 text-[17px] font-bold text-white" data-testid="bt-phase">
+              ● GRAVANDO · Take {number}
+            </div>
+          )}
+          {btPhase === 'ultimo' && (
+            <div className="rounded-[10px] border-2 border-check-ink bg-check-soft px-3 py-2 text-[15px]" data-testid="bt-phase">
+              <b>ÚLTIMO TAKE GRAVADO · Take {number}.</b> Avalie GOOD / NG e as estrelas. O próximo REC da câmera abre o take {number + 1}.
+            </div>
+          )}
+          {btPhase === 'espera' && (
+            <div className="rounded-[10px] border-2 border-line px-3 py-2 text-[15px] text-muted" data-testid="bt-phase">
+              <b className="text-ink">PRÓXIMO TAKE · Take {number}.</b> Começa quando a câmera der REC.
+            </div>
+          )}
+
           <div className="bc-rec__take">
             <div>
               <TakeNumber numero={number} />
               <div className="mt-1 pl-1 font-mono text-[15px] text-muted">
                 {isDraft ? 'em andamento' : `${fmtTime(active.recorded_at)} · ${fmtDate(active.shoot_date)}`}
               </div>
+              {(active.extra?.tc_in || btRecHere) && (
+                <div className="mt-0.5 pl-1 font-mono text-[15px]" data-testid="take-tc">
+                  {btRecHere && <span className="mr-2 rounded bg-ng px-1.5 font-bold text-white">● REC</span>}
+                  TC {active.extra?.tc_in || '—'} → {active.extra?.tc_out || '…'}{active.duration ? ` · ${active.duration}` : ''}
+                </div>
+              )}
+              {active.extra?.bt_offline && <div className="mt-0.5 pl-1 text-[13px] text-muted">rodou sem conexão com a câmera · sem TC</div>}
             </div>
             <div className="bc-rec__takedir">
               <SegmentToggle label="Som" value={active.sound === 'mos' ? 'MOS' : 'SYNC'}
@@ -386,7 +468,7 @@ export default function Shot() {
             )}
             {v.continuidade && (<>
             <StatusPicker value={UP[active.status] || null} disabled={!canEdit}
-              onChange={(x) => { vibrate(); setField(active, 'status', DOWN[x] || null) }} />
+              onChange={(x) => { vibrate(); setField(active, 'status', DOWN[x] || null); if (!active._draft) bt.statusChanged(active.id, DOWN[x] || null) }} />
             <StarRating value={ratingOf(active)} disabled={!canEdit}
               rotulo={active.status === 'good' ? (ratingOf(active) >= 5 ? 'VALEU' : 'RESERVA') : ''}
               onChange={(n) => { vibrate(); setField(active, 'rating', n) }} />
