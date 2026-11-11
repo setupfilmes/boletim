@@ -33,8 +33,9 @@ export default function CameraBtBar({ project }) {
   if (s.status === 'idle' || s.status === 'error') {
     body = (
       <>
-        <span className="flex-1 text-muted">Câmera Bluetooth desligada</span>
-        <button type="button" className={`${chip} border-borda bg-surface`} onClick={() => link.connect()} data-testid="bt-connect">Conectar</button>
+        <span className="flex-1 text-muted">Câmera Bluetooth</span>
+        <button type="button" className={`${chip} border-borda bg-surface`} onClick={() => link.connect('blackmagic')} data-testid="bt-connect">Blackmagic</button>
+        <button type="button" className={`${chip} border-borda bg-surface`} onClick={() => link.connect('sony')} data-testid="bt-connect-sony">Sony</button>
       </>
     )
   } else if (on && s.noData) {
@@ -45,7 +46,7 @@ export default function CameraBtBar({ project }) {
         {s.camera.recording
           ? <span className="rounded-md bg-ng px-2 py-0.5 font-bold text-white" data-testid="bt-rec">● REC</span>
           : <span className="font-bold text-good">●</span>}
-        <span className="flex-1 truncate"><Tc />{s.deviceName ? <span className="text-muted"> · {s.deviceName}</span> : null}</span>
+        <span className="flex-1 truncate">{s.brand === 'sony' ? <span className="text-muted">sem timecode</span> : <Tc />}{s.deviceName ? <span className="text-muted"> · {s.deviceName}</span> : null}</span>
       </>
     )
   } else {

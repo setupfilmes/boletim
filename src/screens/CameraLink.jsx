@@ -55,6 +55,7 @@ export default function CameraLink({ standalone }) {
   const cam = s.camera || {}
   const slate = cam.slate || {}
   const on = s.status === 'connected'
+  const sony = s.brand === 'sony'
 
   useEffect(() => {
     navigator.bluetooth?.getDevices?.().then((l) => setHasKnown(l.length > 0)).catch(() => {})
@@ -128,7 +129,8 @@ export default function CameraLink({ standalone }) {
           <div className="mt-3 grid gap-2">
             {s.status === 'idle' || s.status === 'error' ? (
               <>
-                <Btn onClick={() => link.connect()}>Conectar câmera</Btn>
+                <Btn onClick={() => link.connect('blackmagic')} data-testid="bt-connect-bmd">Conectar Blackmagic</Btn>
+                <Btn variant="surface" onClick={() => link.connect('sony')} data-testid="bt-connect-sony">Conectar Sony (teste)</Btn>
                 {hasKnown && <Btn variant="surface" onClick={() => link.reconnectKnown()}>Reconectar a última câmera</Btn>}
               </>
             ) : (
@@ -139,7 +141,12 @@ export default function CameraLink({ standalone }) {
             )}
           </div>
           <p className="mt-2 text-xs text-muted">
-            Na câmera: Bluetooth ligado e nenhum outro aparelho conectado (ela aceita um de cada vez).
+            <b>Sony (FX3, FX30) — teste:</b> no menu da câmera, em Rede → Bluetooth, ligue a função Bluetooth e o
+            <b> controle remoto Bluetooth</b> (os nomes mudam um pouco com o firmware). Na primeira vez a câmera pede para
+            confirmar o pareamento na tela dela. Pela Sony só vem o REC e o CORTA: sem timecode, ISO, WB nem claquete.
+          </p>
+          <p className="mt-2 text-xs text-muted">
+            <b>Blackmagic:</b> Bluetooth ligado e nenhum outro aparelho conectado (ela aceita um de cada vez).
             <b> Na primeira vez, pareie pelo sistema</b> (Android: Configurações → Dispositivos conectados → Parear novo
             dispositivo; Windows: Configurações → Bluetooth → Adicionar dispositivo) e digite o PIN que aparece na
             câmera. Depois disso é só conectar por aqui.
@@ -153,10 +160,15 @@ export default function CameraLink({ standalone }) {
               {cam.recording ? '● REC' : 'parada'}
             </span>
           </div>
-          <LiveTimecode />
-          <p className="mt-1 text-xs text-muted">O timecode pelo Bluetooth é referência, não sincronismo.</p>
+          {sony
+            ? <p className="text-sm text-muted">A Sony não manda timecode pelo Bluetooth. O take fica com a hora e a duração pelo relógio do aparelho.</p>
+            : <>
+              <LiveTimecode />
+              <p className="mt-1 text-xs text-muted">O timecode pelo Bluetooth é referência, não sincronismo.</p>
+            </>}
         </Card>
 
+        {!sony && (<>
         <Card className="p-4">
           <Title>Câmera</Title>
           <Row label="Codec" value={cam.codec ? `${cam.codec} ${cam.codecVariant || ''}` : null} />
@@ -205,6 +217,7 @@ export default function CameraLink({ standalone }) {
             </div>
           </div>
         </Card>
+        </>)}
 
         <Card className="p-4">
           <div className="flex items-center justify-between gap-3">
@@ -271,6 +284,13 @@ export default function CameraLink({ standalone }) {
           <div className="mt-3">
             <Title>Gravar pelo app</Title>
             <p className="mb-3 text-xs text-muted">Manda REC e parar para a câmera. Cada toque pede confirmação.</p>
+            {sony ? (
+              <Btn variant="danger" full disabled={!on} onClick={async () => {
+                if (await confirm({ title: 'Botão REC pelo app', confirmLabel: 'Apertar REC', danger: true,
+                  message: 'Aperta o botão REC do controle remoto: começa a gravar se estiver parada, para se estiver gravando.' }))
+                  link.sonyRecordToggle().catch((e) => notify(e.message, 'error'))
+              }}>Botão REC (liga / desliga)</Btn>
+            ) : (
             <div className="grid grid-cols-2 gap-2">
               <Btn variant="danger" disabled={!on} onClick={async () => {
                 if (await confirm({ title: 'Gravar pelo app', confirmLabel: 'Gravar', danger: true, message: 'Mandar REC para a câmera?' }))
@@ -281,6 +301,7 @@ export default function CameraLink({ standalone }) {
                   send(cmd.record(false), 'Parar')
               }}>Parar</Btn>
             </div>
+            )}
           </div>
         </details>
       </main>

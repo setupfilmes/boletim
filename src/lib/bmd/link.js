@@ -1,10 +1,11 @@
-// Conexão Web Bluetooth com uma câmera Blackmagic.
+// Conexão Web Bluetooth com uma câmera Blackmagic ou Sony (Sony: só REC/CORTA, ver sony.js).
 // Funciona no Chrome/Edge do Android, Windows, macOS e ChromeOS. Não funciona em navegador de iPhone/iPad.
 // Uma conexão só, guardada aqui fora do React: continua viva ao trocar de tela.
 //
 // Ordem da conexão (a mesma do CCU Bridge): conecta → acha o serviço → acha as características →
 // escreve o nosso nome (é aqui que a câmera costuma pedir o PIN) → assina recebimento, timecode e status.
 import { SERVICE, CHR, parseMessages, applyMessage, parseTimecode, describe, toHex, detectGap } from './protocol'
+import { SONY_SERVICE, SONY_CHR, SONY_COMPANY_ID, SONY_BUTTON, SONY_SUBJECT, sonyCommand, parseSonyNotify } from './sony'
 
 const MAX_LOG = 400
 const RETRY_MS = 4000
@@ -13,6 +14,8 @@ const DEVICE_NAME = 'Boletim'
 // Guardado no aparelho: as gravações detectadas sobrevivem a recarregar a página, e o "retrato" da câmera
 // permite descobrir, ao reconectar, o que foi gravado enquanto estava sem conexão.
 const REC_KEY = 'boletim.bt.recordings'
+const BRAND_KEY = 'boletim.bt.brand' // 'blackmagic' | 'sony' — marca da última câmera escolhida
+const DEVICE_KEY = 'boletim.bt.device' // id (do navegador) da última câmera escolhida
 const SNAP_KEY = 'boletim.bt.snapshot'
 const MAX_RECORDINGS = 500
 const GAP_CHECK_MS = 3000 // a câmera manda o estado completo logo depois de conectar
@@ -22,6 +25,7 @@ const save = (key, value) => { try { localStorage.setItem(key, JSON.stringify(va
 
 const initial = () => ({
   status: 'idle', // idle | choosing | connecting | connected | reconnecting | error
+  brand: load(BRAND_KEY, 'blackmagic'), // 'blackmagic' | 'sony'
   error: '',
   deviceName: '',
   camera: {}, // estado da câmera (recording, codec, fps, slate…)
@@ -93,6 +97,11 @@ function onIncoming(e) {
     if (cam !== before || !(m.category === 9 || (m.category === 1 && m.parameter === 9))) log('←', describe(m))
   }
   if (!msgs.length) log('←', `cru ${toHex(bytes)}`)
+  applyCamera(cam)
+}
+
+// Estado novo da câmera: início e fim de gravação viram registros (base do "take automático")
+function applyCamera(cam) {
   if (cam === state.camera) return
   const wasRec = !!state.camera.recording
   const isRec = !!cam.recording
@@ -120,6 +129,15 @@ function onTimecode(e) {
   else lastDataAt = Date.now()
   state = { ...state, timecode: tc, timecodeAt: Date.now() } // sem avisar a tela toda
   tcListeners.forEach((l) => l(tc))
+}
+
+// Sony: aviso de 3 bytes (0x02, assunto, valor). Só o de gravação (D5) muda o estado.
+function onSonyNotify(e) {
+  const bytes = new Uint8Array(e.target.value.buffer.slice(0))
+  gotData()
+  const n = parseSonyNotify(bytes)
+  log('←', `sony ${toHex(bytes)}${n ? ` · ${SONY_SUBJECT[n.subject] || `assunto ${n.subject.toString(16)}`} ${n.value === 0x20 ? 'sim' : n.value === 0 ? 'não' : n.value}` : ''}`)
+  if (n?.recording !== undefined && n.recording !== !!state.camera.recording) applyCamera({ ...state.camera, recording: n.recording })
 }
 
 function onStatus(e) {
@@ -205,6 +223,37 @@ async function openInner() {
   // A câmera às vezes aceita e derruba logo em seguida (ainda refazendo a criptografia do pareamento)
   await new Promise((r) => setTimeout(r, 300))
   if (!device.gatt.connected) throw new Error('a câmera aceitou e derrubou a conexão logo em seguida')
+  if (state.brand === 'sony') await openSony(server)
+  else await openBlackmagic(server)
+  refusals = 0
+  set({ status: 'connected', deviceName: device.name || (state.brand === 'sony' ? 'Câmera Sony' : 'Câmera Blackmagic'), noData: false, refused: false })
+  log('·', `conectada: ${device.name || ''}`)
+  afterConnect(before)
+}
+
+// Sony: serviço do controle remoto; avisos em FF02, comandos em FF01. Pareamento: pelo menu da câmera.
+async function openSony(server) {
+  let service
+  try { service = await server.getPrimaryService(SONY_SERVICE) } catch {
+    throw new Error('A câmera não tem o serviço de controle remoto. Ligue "Controle remoto Bluetooth" no menu da câmera.')
+  }
+  log('·', 'serviço de controle remoto Sony encontrado')
+  const command = await service.getCharacteristic(SONY_CHR.command).catch(() => null)
+  const notify = await service.getCharacteristic(SONY_CHR.notify).catch(() => null)
+  const props = (c) => c ? Object.entries({ escrita: c.properties.write, 'escrita sem resposta': c.properties.writeWithoutResponse,
+    aviso: c.properties.notify, indicação: c.properties.indicate, leitura: c.properties.read }).filter(([, v]) => v).map(([k]) => k).join('/') : 'não'
+  log('·', `características: comando ${props(command)}; avisos ${props(notify)}`)
+  if (!command && !notify) throw new Error('A câmera não tem as características de comando esperadas.')
+  chars = { outgoing: command, incoming: notify }
+  if (notify) {
+    notify.removeEventListener('characteristicvaluechanged', onSonyNotify)
+    notify.addEventListener('characteristicvaluechanged', onSonyNotify)
+    log('·', 'assinando os avisos (a câmera pode pedir para confirmar o pareamento)…')
+    await step('assinando os avisos', notify.startNotifications())
+  }
+}
+
+async function openBlackmagic(server) {
   const service = await server.getPrimaryService(SERVICE)
   log('·', 'serviço Blackmagic encontrado')
   const get = (uuid) => service.getCharacteristic(uuid).catch(() => null)
@@ -243,9 +292,9 @@ async function openInner() {
     status.addEventListener('characteristicvaluechanged', onStatus)
     await status.startNotifications().catch(() => {})
   }
-  refusals = 0
-  set({ status: 'connected', deviceName: device.name || 'Câmera Blackmagic', noData: false, refused: false })
-  log('·', `conectada: ${device.name || ''}`)
+}
+
+function afterConnect(before) {
   setTimeout(() => {
     if (state.status !== 'connected') return
     const cam = state.camera
@@ -266,6 +315,8 @@ async function openInner() {
     if (list.length !== state.recordings.length || list[list.length - 1] !== state.recordings[state.recordings.length - 1]) set({ recordings: list })
     saveSnapshot(state.camera)
   }, GAP_CHECK_MS)
+  // Sony só avisa quando algo muda (REC, foco): ficar quieta não quer dizer que não pareou
+  if (state.brand === 'sony') return
   const since = Date.now()
   clearTimeout(noDataTimer)
   noDataTimer = setTimeout(() => {
@@ -277,19 +328,21 @@ async function openInner() {
 }
 
 /** Abre o seletor do navegador (precisa vir de um toque do usuário) e conecta. */
-export async function connect() {
+export async function connect(brand = 'blackmagic') {
   if (!supported()) throw new Error('Este navegador não tem Bluetooth para sites.')
   wantConnected = true
   set({ status: 'choosing', error: '' })
   try {
-    const chosen = await navigator.bluetooth.requestDevice({
-      filters: [{ services: [SERVICE] }],
-      optionalServices: [SERVICE, 'device_information'],
-    })
+    // Sony nem sempre anuncia o serviço: acha pelo código de fabricante da Sony no anúncio
+    const chosen = await navigator.bluetooth.requestDevice(brand === 'sony'
+      ? { filters: [{ manufacturerData: [{ companyIdentifier: SONY_COMPANY_ID }] }, { services: [SONY_SERVICE] }], optionalServices: [SONY_SERVICE] }
+      : { filters: [{ services: [SERVICE] }], optionalServices: [SERVICE, 'device_information'] })
     if (device && device !== chosen) device.removeEventListener('gattserverdisconnected', onDisconnected)
     device = chosen
     device.addEventListener('gattserverdisconnected', onDisconnected)
-    set({ camera: {}, timecode: null })
+    save(BRAND_KEY, brand)
+    save(DEVICE_KEY, chosen.id)
+    set({ camera: {}, timecode: null, brand })
     await open()
   } catch (err) {
     const cancelled = err.name === 'NotFoundError' && /cancel/i.test(err.message)
@@ -298,7 +351,7 @@ export async function connect() {
     noteRefusal(err)
     // Caiu durante a preparação (ex.: PIN demorou > 30 s): tenta de novo sozinho
     // Câmera escolhida mas a conexão caiu na preparação (PIN demorou, link instável): tenta de novo sozinho
-    const permanent = ['SecurityError', 'NotAllowedError'].includes(err.name) || /características de comando/.test(err.message)
+    const permanent = ['SecurityError', 'NotAllowedError'].includes(err.name) || /características de comando|serviço de controle remoto/.test(err.message)
     if (device && wantConnected && !permanent) { set({ status: 'reconnecting', error: '' }); return scheduleRetry() }
     wantConnected = false
     set({ status: 'error', error: friendly(err) })
@@ -309,7 +362,7 @@ export async function connect() {
 export async function reconnectKnown() {
   if (!navigator.bluetooth?.getDevices) return false
   const list = await navigator.bluetooth.getDevices()
-  const cam = list[0]
+  const cam = list.find((d) => d.id === load(DEVICE_KEY, null)) || list[0]
   if (!cam) return false
   device = cam
   device.removeEventListener('gattserverdisconnected', onDisconnected)
@@ -333,11 +386,39 @@ export function disconnect() {
   set({ status: 'idle' })
 }
 
-/** Envia um comando (Uint8Array de protocol.js). */
-export async function send(bytes, label = '') {
-  if (!chars.outgoing) throw new Error('Câmera não conectada.')
-  log('→', `${label ? label + ' ' : ''}${toHex(bytes)}`)
-  await chars.outgoing.writeValueWithResponse(bytes)
+const SEND_TIMEOUT_MS = 4000
+// Um comando de cada vez: o Bluetooth recusa um comando novo enquanto o anterior não terminou
+// ("GATT operation already in progress"). Se um comando ficar preso, a fila anda depois de 6 s.
+let gattChain = Promise.resolve()
+const delay = (ms) => new Promise((r) => setTimeout(r, ms))
+
+/** Envia um comando (Uint8Array de protocol.js ou sony.js). Não fica preso: desiste em 4 s. */
+export function send(bytes, label = '') {
+  const run = gattChain.then(() => sendNow(bytes, label))
+  gattChain = Promise.race([run.catch(() => {}), delay(SEND_TIMEOUT_MS + 2000)])
+  return run
+}
+
+async function sendNow(bytes, label) {
+  const c = chars.outgoing
+  if (!c) throw new Error('Câmera não conectada.')
+  // Sony (controle remoto): sem esperar resposta, se a câmera aceitar; Blackmagic: com resposta
+  const noReply = c.properties?.writeWithoutResponse && (state.brand === 'sony' || !c.properties?.write)
+  log('→', `${label ? label + ' ' : ''}${toHex(bytes)}${noReply ? ' (sem resposta)' : ''}`)
+  const write = noReply ? c.writeValueWithoutResponse(bytes) : c.writeValueWithResponse(bytes)
+  let timer
+  const timeout = new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(
+    state.brand === 'sony'
+      ? 'a câmera não respondeu ao comando: confira se ela está pareada com este aparelho e com o controle remoto Bluetooth ligado'
+      : 'a câmera não respondeu ao comando')), SEND_TIMEOUT_MS) })
+  try { await Promise.race([write, timeout]) } catch (e) { log('·', `comando sem resposta: ${e.name === 'Error' ? '' : `${e.name}: `}${e.message}`); throw e } finally { clearTimeout(timer) }
+}
+
+/** Sony: aperta e solta o botão REC do controle remoto (liga ou desliga a gravação). */
+export async function sonyRecordToggle() {
+  await send(sonyCommand(SONY_BUTTON.recordDown), 'REC (apertar)')
+  await delay(120)
+  await send(sonyCommand(SONY_BUTTON.recordUp), 'REC (soltar)')
 }
 
 export function clearRecordings() { set({ recordings: [] }) }

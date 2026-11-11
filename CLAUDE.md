@@ -447,6 +447,19 @@ Conexão direta (Web Bluetooth), sem o app da Blackmagic. Protocolo traduzido do
     Multicâmera: a letra da câmera Bluetooth fica em `boletim.bt.letter` por projeto (uma câmera por vez, por enquanto).
   - Ordem: 1) uma câmera na tela do take; 2) multicâmera; 3) "Conferir cartão" casando também pelo TC de início;
     4) app de iPhone (Capacitor).
+- **Sony (FX3, FX30) — teste, 11/11/2026, falta testar com a câmera:** `src/lib/bmd/sony.js` = protocolo do controle
+  remoto Bluetooth (RMT-P1BT), **não oficial** (mapeado por terceiros: Greg Leeds, freemote, furble, Hypoxic). Serviço
+  `8000FF00-FF00-FFFF-FFFF-FFFFFFFFFFFF`, comando FF01 (2 bytes: REC apertar 0x010F / soltar 0x010E), avisos FF02
+  (3 bytes `02 D5 20` gravando / `02 D5 00` parada). Busca pelo código de fabricante Sony 0x012D. `link.connect('sony')`
+  (marca em `boletim.bt.brand`); `session.js` não manda claquete nem good take para a Sony; sem aviso `noData`.
+  Pela Sony vem só REC/CORTA: take com hora e duração pelo relógio, sem TC nem ISO/WB/shutter/FPS.
+  **Funcionou com FX3 (11/11/2026, PC Windows + Chrome).** Pareamento: só conecta de verdade com a câmera pareada
+  pelo sistema — FX3 em MENU → Rede → Bluetooth (função ligada, controle remoto Bluetooth ligado) → tela
+  **Emparelhamento**, e no Windows "Adicionar dispositivo" (busca "Avançado") → ILME-FX3 → confirmar na câmera.
+  Sem isso, o site "conecta" mas a câmera não manda avisos e não responde aos comandos (o envio desiste em 4 s).
+  **Nome do arquivo não vem pelo Bluetooth** (o protocolo do controle remoto só tem botões e avisos).
+  O controle completo da Sony (Creators' App / Monitor & Control) é por Wi-Fi (PTP/IP): o navegador não alcança; o kit
+  oficial (Camera Remote SDK) só roda em computador. No app nativo (Capacitor) dá para estudar — projeto à parte.
 - **iPhone/iPad:** nenhum navegador tem Web Bluetooth. Caminho: app com Capacitor + plugin BLE (trocar só `link.js`).
 - Falta: testar no celular Android (S25+), conferir cena/take/good take no metadado do clipe no Resolve, e ligar à
   tela do plano (REC cria o take com TC in, CORTA preenche TC out/duração, app manda cena/take para a câmera).

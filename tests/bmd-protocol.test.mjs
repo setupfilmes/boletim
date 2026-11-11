@@ -131,3 +131,14 @@ test('duração pelo timecode', () => {
   assert.equal(tcDuration('', '14:02:50:12', 24), null)
   assert.equal(tcDuration('14:02:10:05', '14:02:50:12', null), null)
 })
+
+test('Sony: aviso de gravação e botão REC do controle remoto', async () => {
+  const { parseSonyNotify, sonyCommand, SONY_BUTTON } = await import('../src/lib/bmd/sony.js')
+  assert.equal(parseSonyNotify(new Uint8Array([0x02, 0xd5, 0x20])).recording, true)
+  assert.equal(parseSonyNotify(new Uint8Array([0x02, 0xd5, 0x00])).recording, false)
+  assert.equal(parseSonyNotify(new Uint8Array([0x02, 0x3f, 0x20])).focus, true)
+  assert.equal(parseSonyNotify(new Uint8Array([0x02, 0x3f, 0x20])).recording, undefined)
+  assert.equal(parseSonyNotify(new Uint8Array([0x01, 0xd5])), null)
+  assert.equal(toHex(sonyCommand(SONY_BUTTON.recordDown)), '010F')
+  assert.equal(toHex(sonyCommand(SONY_BUTTON.recordUp)), '010E')
+})

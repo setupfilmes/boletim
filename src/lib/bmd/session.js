@@ -193,6 +193,7 @@ let lastSlate = { scene: null, take: null, at: 0 }
 /** Deixa a claquete da câmera com a cena e o nº do take que o próximo REC vai criar. */
 export async function syncSlate(scene, take) {
   const ls = link.getState()
+  if (ls.brand === 'sony') return // Sony não tem claquete digital
   if (ls.status !== 'connected' || ls.noData || ls.camera.recording || !take) return
   const slate = ls.camera.slate || {}
   const sc = String(scene || '').slice(0, 5)
@@ -213,6 +214,7 @@ export async function syncSlate(scene, take) {
 /** GOOD/NG/CHECK no take que acabou de ser gravado: marca o good take na câmera (vale para o último clipe). */
 export async function statusChanged(takeId, status) {
   const ls = link.getState()
+  if (ls.brand === 'sony') return // Sony não tem good take pelo Bluetooth
   if (takeId !== state.lastRecTakeId || ls.status !== 'connected' || ls.camera.recording) return
   try { await link.send(cmd.goodTake(status === 'good'), status === 'good' ? 'Good take' : 'Good take não') } catch { /* sem conexão */ }
 }
