@@ -12,6 +12,7 @@ import { Button, PlanoCard, Tag, EmptyState } from '../ds/components'
 import { groupTakes, isMulticam, projectCameras, linkedShots, shotCameras, shotLabel } from '../lib/cameras'
 import { SceneForm } from './Project'
 import { useDays, dayLabel } from '../lib/days'
+import { clipTypeLabel } from '../lib/fields'
 
 export const SHOT_TYPES = ['PG', 'PC', 'PA', 'PM', 'PP', 'PPP', 'Detalhe', 'Insert', 'Plongée', 'Contra-plongée', 'Plano-sequência', 'Master']
 
@@ -52,7 +53,8 @@ export default function Scene() {
       const list = day ? mine.filter((t) => t.shoot_date === day.date) : mine
       const groups = groupTakes(list, project)
       const used = [...new Set(mine.map((t) => t.camera).filter(Boolean))].sort()
-      m[s.id] = { groups, proximo: all.reduce((n, t) => Math.max(n, t.take_number), 0) + 1, used }
+      // falso REC, ensaio, cobertura de som… não contam como take nem mudam o próximo número (igual à tela do plano)
+      m[s.id] = { groups, proximo: all.filter((t) => !t.clip_type).reduce((n, t) => Math.max(n, t.take_number), 0) + 1, used }
     }
     return m
   }, [takes, shots, project, day])
@@ -61,6 +63,13 @@ export default function Scene() {
   if (!scene || scene.deleted) return (<><TopBar title="Cena" back={backTo} /><Empty title="Cena não encontrada" /></>)
 
   const openShot = (s, extra = '') => nav(`/p/${projectId}/s/${sceneId}/sh/${s.id}${q}${extra ? (q ? '&' : '?') + extra : ''}`)
+  // "6 insert", "1 falso REC e 2 ensaio": registros fora da numeração de takes
+  const avulsosText = (groups) => {
+    const n = {}
+    for (const g of groups) if (g.clipType) n[g.clipType] = (n[g.clipType] || 0) + 1
+    const parts = Object.entries(n).map(([k, c]) => `${c} ${clipTypeLabel(k).toLowerCase().replace('rec', 'REC')}`)
+    return parts.length ? parts.join(' e ') : undefined
+  }
   const chipsOf = (info) => {
     const out = []
     for (const g of info.groups.filter((x) => !x.clipType).slice(0, multi ? 3 : 6)) {
@@ -99,7 +108,7 @@ export default function Scene() {
               <div key={s.id} data-testid="shot-card">
                 <PlanoCard numero={shotLabel(scene, s)} tipo={s.shot_type || undefined} descricao={s.description || undefined}
                   cams={cams} junto={linked.length ? linked.map((x) => shotLabel(scene, x)).join(', ') : undefined}
-                  proximo={info.proximo} takes={chipsOf(info)} total={info.groups.length} podeGravar={canEdit}
+                  proximo={info.proximo} takes={chipsOf(info)} total={info.groups.filter((g) => !g.clipType).length} avulsos={avulsosText(info.groups)} podeGravar={canEdit}
                   onGravar={() => nav(`/p/${projectId}/s/${sceneId}/sh/${s.id}${q}`, { state: { gravar: true } })}
                   onVerTodos={() => openShot(s, 'lista=1')} onRenomear={canEdit ? () => setForm(s) : undefined} />
               </div>

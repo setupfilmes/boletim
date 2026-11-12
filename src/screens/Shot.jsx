@@ -277,6 +277,25 @@ export default function Shot() {
               </Button>
             </div>
           )}
+          {canEdit && (() => {
+            const marcados = g2.filter((g) => g.clipType && !SET_TYPES.includes(g.clipType))
+            if (!marcados.length) return null
+            const tipos = [...new Set(marcados.map((g) => clipTypeLabel(g.clipType)))].join(' / ')
+            return (
+              <div className="mx-4 mb-3 grid gap-2 rounded-[10px] border-2 border-check-ink bg-check-soft p-3" data-testid="marked-clips">
+                <p className="text-[15px] font-bold">{marcados.length === 1 ? '1 registro marcado' : `${marcados.length} registros marcados`} como {tipos} não {marcados.length === 1 ? 'conta' : 'contam'} como take.</p>
+                <Button size="p" variant="primario" onClick={async () => {
+                  const livres = marcados.filter((g) => !g2.some((x) => !x.clipType && x.number === g.number))
+                  for (const g of livres) for (const r of g.rows) {
+                    await update('takes', r.id, { clip_type: null })
+                    await updateExtra(r.id, 'corrigido_em', nowISO())
+                  }
+                  const presos = marcados.length - livres.length
+                  notify(`${livres.length === 1 ? '1 registro voltou' : `${livres.length} registros voltaram`} a ser take${presos ? ` · ${presos} já tinham take com o mesmo número: abra e troque o número` : ''}`)
+                }} data-testid="unmark-clips">Voltar a ser take{marcados.length === 1 ? '' : 's'}</Button>
+              </div>
+            )
+          })()}
           {g2.length === 0 && <EmptyState icon="clapperboard" title="Nenhum take ainda">{canEdit ? `Toque em Gravar ${nextNumber} para registrar o primeiro.` : 'Ainda não há takes neste plano.'}</EmptyState>}
           <div className="border-t-2 border-line" data-testid="takes">
             {g2.map((g) => g.rows.map((r) => (
@@ -298,6 +317,8 @@ export default function Shot() {
           </div>
         )}
         {soundSheet}
+        {/* opções de falso REC / ensaio / insert tocados na lista (antes só abria na tela de registro e o toque não fazia nada) */}
+        {editGroup && <TakeEditSheet group={editGroup} onClose={() => setEditGroup(null)} groups={groups} />}
       </>
     )
   }
@@ -669,6 +690,10 @@ function TextSheet({ state, onClose, onSave, takes, title = '', readOnly }) {
 }
 
 // Opções do take: número e diária valem para todas as câmeras do take
+// Tipos oferecidos nas opções do take. Wild e insert continuam valendo para o que veio do Resolve, mas saíram daqui:
+// o "Insert" era confundido com o tipo do plano e os takes sumiam da contagem (12/11/2026).
+const SET_TYPES = ['falso_rec', 'ensaio', 'som']
+
 function TakeEditSheet({ group, onClose, groups, onDeleted }) {
   const { confirm, notify } = useDialog()
   const [num, setNum] = useState(String(group.number))
@@ -690,6 +715,12 @@ function TakeEditSheet({ group, onClose, groups, onDeleted }) {
     <Sheet open onClose={onClose} title={group.clipType ? `${clipTypeLabel(group.clipType)} (take ${group.number})` : `Take ${group.number}`}
       footer={<Btn full size="lg" onClick={save}>Salvar</Btn>}>
       <div className="grid gap-4">
+        {group.clipType && (
+          <p className="rounded-[10px] border-2 border-check-ink bg-check-soft px-3 py-2 text-[15px] font-bold" data-testid="clip-type-warning">
+            Este registro está marcado como {clipTypeLabel(group.clipType)} e não conta como take. Para voltar a ser o take {group.number},
+            toque em <u>Take</u> abaixo e em Salvar.
+          </p>
+        )}
         <div className="grid grid-cols-2 gap-3">
           <TextInput label="Nº do take" inputMode="numeric" value={num} onChange={(e) => setNum(e.target.value)} />
           <TextInput label="Diária (data)" type="date" value={date || ''} onChange={(e) => setDate(e.target.value)} />
@@ -697,12 +728,13 @@ function TakeEditSheet({ group, onClose, groups, onDeleted }) {
         <div role="group" aria-label="Tipo do clipe">
           <div className="mb-1.5 text-[13px] font-bold uppercase tracking-[.07em] text-muted">Tipo do clipe</div>
           <div className="flex flex-wrap gap-2">
-            {[{ key: '', label: 'Take' }, ...CLIP_TYPES].map((c) => (
+            {[{ key: '', label: 'Take' }, ...CLIP_TYPES.filter((c) => SET_TYPES.includes(c.key) || c.key === group.clipType)].map((c) => (
               <button key={c.key} type="button" aria-pressed={kind === c.key} onClick={() => setKind(c.key)}
                 className={`min-h-12 rounded-[10px] border-2 px-3 font-bold ${kind === c.key ? 'border-ink bg-ink text-bg' : 'border-borda bg-surface'}`}>{c.label}</button>
             ))}
           </div>
-          <p className="mt-1 text-[15px] text-muted">Falso REC, ensaio, wild e insert gastam número de clipe, não de take. Cobertura de som não gasta nenhum dos dois.</p>
+          <p className="mt-1 text-[15px] text-muted">Só para o que não foi take de verdade: falso REC e ensaio gastam número de clipe, não de take;
+            cobertura de som não gasta nenhum dos dois. Plano de insert é o <b>tipo do plano</b> (Editar plano), não daqui.</p>
         </div>
         {many && group.rows.map((r) => (
           <Btn key={r.id} variant="ghost" onClick={async () => {

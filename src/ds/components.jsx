@@ -419,7 +419,8 @@ export function ProjetoCard({ nome, papel = 'dono', tipo, detalhe, atividade, pe
   );
 }
 
-export function PlanoCard({ numero, tipo, descricao, cams, junto, proximo, takes = [], total = 0, podeGravar = true, onGravar, onVerTodos, onRenomear }) {
+// avulsos: texto sobre registros que não contam como take (falso REC, ensaio, cobertura de som…), ex.: "2 falso REC"
+export function PlanoCard({ numero, tipo, descricao, cams, junto, proximo, takes = [], total = 0, avulsos, podeGravar = true, onGravar, onVerTodos, onRenomear }) {
   return (
     <section className="bc-card bc-pcard" aria-label={'Plano ' + numero}>
       <header className="bc-pcard__topo">
@@ -459,11 +460,12 @@ export function PlanoCard({ numero, tipo, descricao, cams, junto, proximo, takes
       ) : (
         <p className="bc-pcard__vazio">Nenhum take ainda</p>
       )}
-      {(total > 0 || onRenomear) && (
+      {avulsos && <p className="bc-pcard__vazio">{avulsos} · não {/^1 /.test(avulsos) ? 'conta' : 'contam'} como take</p>}
+      {(total > 0 || avulsos || onRenomear) && (
         <footer className="bc-pcard__rodape">
-          {total > 0 ? (
+          {total > 0 || avulsos ? (
             <button type="button" className="bc-link" onClick={onVerTodos}>
-              {total === 1 ? 'Ver o take' : 'Todos os ' + total + ' takes'}
+              {total === 0 ? 'Ver os registros' : total === 1 ? 'Ver o take' : 'Todos os ' + total + ' takes'}
             </button>
           ) : <span />}
           {onRenomear && <Button variant="fantasma" size="p" icon="pencil" onClick={onRenomear}>Editar plano</Button>}

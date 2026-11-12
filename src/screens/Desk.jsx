@@ -164,7 +164,7 @@ function SceneWork({ project, scene, shots, shot, day, takes, canEdit, onShot, o
   const shotTakes = (takes || []).filter((t) => ids.has(t.shot_id))
   const visible = day && !allDays ? shotTakes.filter((t) => t.shoot_date === day.date) : shotTakes
   const photos = useTakePhotos(shotTakes.map((t) => t.id))
-  const next = shotTakes.reduce((m, t) => Math.max(m, t.take_number), 0) + 1
+  const next = shotTakes.filter((t) => !t.clip_type).reduce((m, t) => Math.max(m, t.take_number), 0) + 1
 
   const file = async (key, fn, mode) => {
     setBusy(key)

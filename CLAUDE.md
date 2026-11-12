@@ -396,6 +396,15 @@ Decisões do Antonio (11/11/2026), a partir dos relatórios da continuísta do D
   tocar reabre a gaveta (editar/excluir). Registro só de som (`soundOnly`) fica **fora** do boletim de câmera, DIT, ALE
   e CSV do Resolve (`reportData(..., { incluirSom: false })`); entra na planilha (Resultado "COBERTURA DE SOM"), no
   boletim diário da continuidade e na observação do relatório final. `countTakes` não conta mais falso REC/ensaio/som.
+- **Registros marcados que "sumiam" (12/11/2026, caso real na produção):** no plano 26.1 (tipo Insert) de um usuário, os 6
+  takes estavam marcados com tipo do clipe (provavelmente "Insert", confundido com o tipo do plano). O cartão do plano
+  dizia "Nenhum take ainda" + "Todos os 6 takes" + "Gravar 7", e na lista o toque não fazia nada (a `TakeEditSheet` só
+  era montada no modo registro). Correções: lista abre as opções do registro; cartão do plano conta só takes de verdade
+  e mostra "N insert · não contam como take" (prop `avulsos` do `PlanoCard`); próximo número ignora registros com tipo
+  (Cena e Desk, igual à tela do plano); "Tipo do clipe" só oferece Falso REC / Ensaio / Cobertura de som (`SET_TYPES`;
+  wild/insert continuam valendo para o que veio do Resolve); aviso na gaveta "para voltar a ser o take N, toque em Take";
+  na lista, faixa "N registros marcados como Insert" com botão **Voltar a ser takes** (pula os que já têm take com o
+  mesmo número).
 - Falta: validar o CSV de volta no Resolve (Import Metadata) e o teste com o Supabase real (rodar o SQL antes).
 
 ## Câmera Blackmagic por Bluetooth (ramo `bluetooth`, 11/11/2026)
